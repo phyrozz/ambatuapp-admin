@@ -1,0 +1,9 @@
+import { NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
+import { adminDb } from '../../../../lib/firebase-admin';
+import { requireAdmin } from '../../../../lib/api-auth';
+import { characterImageKey, deleteCharacterImage, signedCharacterImageUrl } from '../../../../lib/s3-images';
+
+export const runtime = 'nodejs';
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) { try { await requireAdmin(request); if (!adminDb) return NextResponse.json({ error: 'Firestore is not configured.' }, { status: 503 }); const body = await request.json(); const { imageUrl: _imageUrl, ...update } = body; const { id } = await params; const ref = adminDb.collection('characters').doc(id); await ref.set({ ...update, updatedAt: FieldValue.serverTimestamp(), updated: 'Just now' }, { merge: true }); const stored = (await ref.get()).data(); return NextResponse.json({ id, ...update, imageUrl: await signedCharacterImageUrl(stored?.imageKey), updated: 'Just now' }); } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Request failed' }, { status: 400 }); } }
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) { try { await requireAdmin(request); if (!adminDb) return NextResponse.json({ error: 'Firestore is not configured.' }, { status: 503 }); const { id } = await params; const ref = adminDb.collection('characters').doc(id); const stored = (await ref.get()).data(); if (!stored) return NextResponse.json({ error: 'Character not found.' }, { status: 404 }); await deleteCharacterImage(characterImageKey(stored.imageKey, stored.image)); await ref.delete(); return NextResponse.json({ id }); } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Request failed' }, { status: 400 }); } }

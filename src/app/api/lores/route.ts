@@ -1,0 +1,10 @@
+import { NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
+import { adminDb } from '../../../lib/firebase-admin';
+import { requireAdmin } from '../../../lib/api-auth';
+import { signedCharacterImageUrl } from '../../../lib/s3-images';
+import { LORE_TEXT_LIMIT, validateLoreTranslations } from '../../../lib/lore';
+export const runtime='nodejs';
+async function hydrate(id:string,data:Record<string,unknown>){const keys=Array.isArray(data.imageKeys)?data.imageKeys.filter((key):key is string=>typeof key==='string'):[];return{id,...data,imageKeys:keys,imageUrls:await Promise.all(keys.map(signedCharacterImageUrl)),updated:data.updated??'Recently'}}
+export async function GET(request:Request){try{await requireAdmin(request);if(!adminDb)return NextResponse.json({configured:false,lores:[]});const snapshot=await adminDb.collection('lores').orderBy('updatedAt','desc').get();return NextResponse.json({configured:true,lores:await Promise.all(snapshot.docs.map(doc=>hydrate(doc.id,doc.data())))})}catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Unauthorized'},{status:401})}}
+export async function POST(request:Request){try{await requireAdmin(request);if(!adminDb)return NextResponse.json({error:'Firestore is not configured.'},{status:503});const body=await request.json();if(typeof body.text!=='string'||!body.text.trim())throw new Error('Lore text is required.');if(body.text.length>LORE_TEXT_LIMIT)throw new Error(`Lore text cannot exceed ${LORE_TEXT_LIMIT.toLocaleString()} characters.`);validateLoreTranslations(body.translations);const stored={title:body.title,text:body.text,translations:body.translations??[],tags:body.tags??[],imageKeys:body.imageKeys??[],status:body.status??'Draft',upvotes:0,downvotes:0,commentCount:0,createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp(),updated:'Just now'};const ref=await adminDb.collection('lores').add(stored);return NextResponse.json(await hydrate(ref.id,{...stored,createdAt:null,updatedAt:null}),{status:201})}catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Request failed'},{status:400})}}

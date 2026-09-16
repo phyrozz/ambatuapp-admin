@@ -1,0 +1,9 @@
+import { NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
+import { adminDb } from '../../../lib/firebase-admin';
+import { requireAdmin } from '../../../lib/api-auth';
+import { characterImageKey, signedCharacterImageUrl } from '../../../lib/s3-images';
+
+export const runtime = 'nodejs';
+export async function GET(request: Request) { try { await requireAdmin(request); if (!adminDb) return NextResponse.json({ configured: false, characters: [] }); const snapshot = await adminDb.collection('characters').orderBy('updatedAt', 'desc').get(); const characters = await Promise.all(snapshot.docs.map(async doc => { const data = doc.data(); const imageKey = characterImageKey(data.imageKey, data.image); return { id: doc.id, ...data, imageKey, imageUrl: await signedCharacterImageUrl(imageKey), updated: data.updated ?? 'Recently' }; })); return NextResponse.json({ configured: true, characters }); } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Unauthorized' }, { status: 401 }); } }
+export async function POST(request: Request) { try { await requireAdmin(request); if (!adminDb) return NextResponse.json({ error: 'Firestore is not configured.' }, { status: 503 }); const body = await request.json(); const ref = await adminDb.collection('characters').add({ name: body.name, title: body.title, bio: body.bio ?? '', status: body.status ?? 'Draft', tags: body.tags ?? [], imageKey: body.imageKey ?? null, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), updated: 'Just now' }); return NextResponse.json({ id: ref.id, ...body, imageUrl: await signedCharacterImageUrl(body.imageKey), updated: 'Just now' }, { status: 201 }); } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Request failed' }, { status: 400 }); } }
