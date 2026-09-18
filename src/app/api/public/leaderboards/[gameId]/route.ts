@@ -8,7 +8,7 @@ const headers = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'content-type, authorization',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Cache-Control': 'public, max-age=30',
+  'Cache-Control': 'no-store',
 };
 const gameIds = new Set(['ambatutap', 'ambatusnake', 'ambatublou', 'flappy-bus']);
 
@@ -17,9 +17,9 @@ function json(body: unknown, status = 200) {
 }
 
 function accessVerifier() {
-  const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID;
-  const clientId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_CLIENT_ID;
-  if (!userPoolId || !clientId) throw new Error('Cognito verification is not configured.');
+  const userPoolId = process.env.COGNITO_PLAYER_USER_POOL_ID;
+  const clientId = process.env.COGNITO_PLAYER_CLIENT_ID;
+  if (!userPoolId || !clientId) throw new Error('Player Cognito verification is not configured.');
   return CognitoJwtVerifier.create({ userPoolId, clientId, tokenUse: 'access' });
 }
 
