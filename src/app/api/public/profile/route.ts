@@ -1,0 +1,41 @@
+import { NextResponse } from 'next/server';
+import { adminDb } from '../../../../lib/firebase-admin';
+import { requirePlayer } from '../../../../lib/player-auth';
+import { fallbackPlayerName } from '../../../../lib/player-profiles';
+
+const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type, authorization', 'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS', 'Cache-Control': 'no-store' };
+const usernamePattern = /^[\p{L}\p{N}][\p{L}\p{N} _-]{1,23}$/u;
+
+export function OPTIONS() { return new NextResponse(null, { headers }); }
+function json(body: unknown, status = 200) { return NextResponse.json(body, { status, headers }); }
+
+function validBirthDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) return false;
+  return value <= new Date().toISOString().slice(0, 10) && year >= 1900;
+}
+
+export async function GET(request: Request) {
+  try {
+    if (!adminDb) throw new Error('Player profile service is not configured.');
+    const player = await requirePlayer(request);
+    const data = (await adminDb.collection('playerProfiles').doc(player.id).get()).data();
+    return json({ username: typeof data?.username === 'string' ? data.username : fallbackPlayerName(player.email), birthDate: typeof data?.birthDate === 'string' ? data.birthDate : null });
+  } catch (error) { return json({ error: error instanceof Error ? error.message : 'Could not load profile.' }, 401); }
+}
+
+export async function PUT(request: Request) {
+  try {
+    if (!adminDb) throw new Error('Player profile service is not configured.');
+    const player = await requirePlayer(request);
+    const { username, birthDate } = await request.json();
+    const cleanUsername = typeof username === 'string' ? username.normalize('NFKC').trim().replace(/\s+/g, ' ') : '';
+    if (!usernamePattern.test(cleanUsername)) throw new Error('Username must be 2–24 letters, numbers, spaces, hyphens, or underscores.');
+    if (birthDate !== null && !validBirthDate(birthDate)) throw new Error('Enter a valid birth date that is not in the future.');
+    const profile = { username: cleanUsername, birthDate: birthDate ?? null, updatedAt: new Date() };
+    await adminDb.collection('playerProfiles').doc(player.id).set(profile, { merge: true });
+    return json(profile);
+  } catch (error) { return json({ error: error instanceof Error ? error.message : 'Could not save profile.' }, 400); }
+}
