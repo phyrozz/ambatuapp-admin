@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { signedCharacterImageUrl } from '../../../../../lib/s3-images';
+import { playerFromRequest } from '../../../../../lib/player-auth';
 
 export const runtime = 'nodejs';
-const headers = { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'private, no-store' };
+const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization', 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Cache-Control': 'private, no-store' };
+export function OPTIONS() { return new NextResponse(null, { headers }); }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!adminDb) return NextResponse.json({ error: 'Lore service is not configured.' }, { status: 503, headers });
@@ -12,9 +14,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const data = (await loreRef.get()).data();
   if (!data || data.status !== 'Published') return NextResponse.json({ error: 'Lore not found.' }, { status: 404, headers });
 
-  const anonymousId = new URL(request.url).searchParams.get('anonymousId');
-  const userVote = anonymousId && anonymousId.length >= 12
-    ? (await loreRef.collection('votes').doc(anonymousId).get()).data()?.value ?? 0
+  const player = await playerFromRequest(request);
+  const userVote = player
+    ? (await loreRef.collection('votes').doc(player.id).get()).data()?.value ?? 0
     : 0;
   const keys = Array.isArray(data.imageKeys) ? data.imageKeys.filter((key): key is string => typeof key === 'string') : [];
 
