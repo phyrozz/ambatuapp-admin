@@ -12,7 +12,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const snapshot = await adminDb.collection('videos').doc(id).collection('comments').orderBy('createdAt', 'desc').limit(50).get();
   const names = await playerNames(snapshot.docs.map((doc) => doc.data().authorId).filter((id, index): id is string => typeof id === 'string' && typeof snapshot.docs[index].data().authorEmail === 'string'), new Map(snapshot.docs.map((doc) => [doc.data().authorId, doc.data().authorEmail ?? ''])));
-  return NextResponse.json({ comments: snapshot.docs.map(doc => { const data = doc.data(); return { id: doc.id, text: data.text, author: typeof data.authorEmail === 'string' ? names.get(data.authorId) ?? data.author ?? fallbackPlayerName(data.authorEmail) : data.author ?? 'Anonymous', createdAt: data.createdAt?.toDate?.().toISOString() ?? null }; }) }, { headers });
+  return NextResponse.json({ comments: snapshot.docs.map(doc => { const data = doc.data(); return { id: doc.id, text: data.text, author: typeof data.authorEmail === 'string' ? names.get(data.authorId) ?? data.author ?? fallbackPlayerName(data.authorEmail) : data.author ?? 'Anonymous', authorId: data.authorEmail ? data.authorId : null, createdAt: data.createdAt?.toDate?.().toISOString() ?? null }; }) }, { headers });
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -28,7 +28,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const author = player ? (await playerNames([player.id], new Map([[player.id, player.email]]))).get(player.id) ?? fallbackPlayerName(player.email) : 'Anonymous';
     const ref = await video.collection('comments').add({ text: text.trim(), author, authorEmail: player?.email ?? null, authorId: player?.id ?? anonymousId, createdAt: FieldValue.serverTimestamp() });
     await video.update({ commentCount: FieldValue.increment(1) });
-    return NextResponse.json({ id: ref.id, text: text.trim(), author, createdAt: new Date().toISOString() }, { status: 201, headers });
+    return NextResponse.json({ id: ref.id, text: text.trim(), author, authorId: player?.id ?? null, createdAt: new Date().toISOString() }, { status: 201, headers });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Comment failed.' }, { status: 400, headers });
   }

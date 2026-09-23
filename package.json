@@ -8,12 +8,15 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "seed:characters": "node --env-file=.env.local scripts/seed-legacy-characters.mjs"
+    "seed:characters": "node --env-file=.env.local scripts/seed-legacy-characters.mjs",
+    "backfill:player-search": "node --env-file=.env.local scripts/backfill-player-search.mjs"
   },
   "dependencies": {
     "@aws-amplify/auth": "^6.11.0",
     "@aws-amplify/core": "^6.11.0",
+    "@aws-sdk/client-dynamodb": "^3.1138.0",
     "@aws-sdk/client-s3": "^3.800.0",
+    "@aws-sdk/lib-dynamodb": "^3.1138.0",
     "@aws-sdk/s3-request-presigner": "^3.800.0",
     "aws-amplify": "^6.20.0",
     "aws-jwt-verify": "^5.1.1",

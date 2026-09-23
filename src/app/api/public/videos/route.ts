@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     const snapshot = await adminDb.collection('videos').where('status', '==', 'Published').get();
     const page = snapshot.docs.sort((a, b) => (b.data().upvotes ?? 0) - (a.data().upvotes ?? 0)).slice(0, limit);
     const names = await playerNames(page.map(doc => doc.data().uploaderId).filter((id): id is string => typeof id === 'string'), new Map(page.map(doc => [doc.data().uploaderId, doc.data().uploaderEmail ?? ''])));
-    const videos = await Promise.all(page.map(async doc => { const data = doc.data(); return { id: doc.id, title: data.title, description: data.description ?? '', uploader: typeof data.uploaderId === 'string' ? names.get(data.uploaderId) ?? data.uploaderName ?? fallbackPlayerName(data.uploaderEmail ?? '') : data.uploaderName ?? data.uploaderEmail, thumbnailUrl: await signedVideoUrl(data.thumbnailKey), upvotes: data.upvotes ?? 0, downvotes: data.downvotes ?? 0, commentCount: data.commentCount ?? 0, createdAt: data.createdAt?.toDate?.().toISOString() ?? null }; }));
+    const videos = await Promise.all(page.map(async doc => { const data = doc.data(); return { id: doc.id, title: data.title, description: data.description ?? '', uploader: typeof data.uploaderId === 'string' ? names.get(data.uploaderId) ?? data.uploaderName ?? fallbackPlayerName(data.uploaderEmail ?? '') : data.uploaderName ?? data.uploaderEmail, uploaderId: data.uploaderId ?? null, thumbnailUrl: await signedVideoUrl(data.thumbnailKey), upvotes: data.upvotes ?? 0, downvotes: data.downvotes ?? 0, commentCount: data.commentCount ?? 0, createdAt: data.createdAt?.toDate?.().toISOString() ?? null }; }));
     return NextResponse.json({ videos, nextCursor: null }, { headers });
   }
   const cursor = Number(url.searchParams.get('cursor'));
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   const names = await playerNames(page.map((doc) => doc.data().uploaderId).filter((id): id is string => typeof id === 'string'), new Map(page.map((doc) => [doc.data().uploaderId, doc.data().uploaderEmail ?? ''])));
   const videos = await Promise.all(page.filter(doc => doc.data().status === 'Published').map(async doc => {
     const data = doc.data();
-    return { id: doc.id, title: data.title, description: data.description ?? '', uploader: typeof data.uploaderId === 'string' ? names.get(data.uploaderId) ?? data.uploaderName ?? fallbackPlayerName(data.uploaderEmail ?? '') : data.uploaderName ?? data.uploaderEmail, thumbnailUrl: await signedVideoUrl(data.thumbnailKey), upvotes: data.upvotes ?? 0, downvotes: data.downvotes ?? 0, commentCount: data.commentCount ?? 0, createdAt: data.createdAt?.toDate?.().toISOString() ?? null };
+    return { id: doc.id, title: data.title, description: data.description ?? '', uploader: typeof data.uploaderId === 'string' ? names.get(data.uploaderId) ?? data.uploaderName ?? fallbackPlayerName(data.uploaderEmail ?? '') : data.uploaderName ?? data.uploaderEmail, uploaderId: data.uploaderId ?? null, thumbnailUrl: await signedVideoUrl(data.thumbnailKey), upvotes: data.upvotes ?? 0, downvotes: data.downvotes ?? 0, commentCount: data.commentCount ?? 0, createdAt: data.createdAt?.toDate?.().toISOString() ?? null };
   }));
   const last = page.at(-1)?.data().createdAt;
   return NextResponse.json({ videos, nextCursor: snapshot.docs.length > limit && last?.toMillis ? last.toMillis() : null }, { headers });

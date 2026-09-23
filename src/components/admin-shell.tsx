@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BookOpen, LogOut, Sparkles, UsersRound, Video } from 'lucide-react';
+import { BookOpen, Flag, LogOut, Sparkles, UsersRound, Video } from 'lucide-react';
 import { fetchAuthSession, signOut } from 'aws-amplify/auth';
 import { authConfigured, configureAuth } from '../lib/auth';
 import { LoadingScreen } from './admin-ui';
@@ -11,6 +11,7 @@ const links = [
   { href: '/', label: 'Characters', Icon: UsersRound },
   { href: '/lores', label: 'Lore archive', Icon: BookOpen },
   { href: '/videos', label: 'Videos', Icon: Video },
+  { href: '/chat-reports', label: 'Chat reports', Icon: Flag },
 ];
 
 export function AdminShell({ children, onSignedOut }: { children: React.ReactNode; onSignedOut?: () => void }) {
