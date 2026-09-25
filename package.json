@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "seed:sounds": "node --env-file=.env.local scripts/seed-legacy-sounds.mjs",
     "seed:characters": "node --env-file=.env.local scripts/seed-legacy-characters.mjs",
     "backfill:player-search": "node --env-file=.env.local scripts/backfill-player-search.mjs"
   },

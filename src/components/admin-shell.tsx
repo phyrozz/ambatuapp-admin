@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BookOpen, Flag, Image, LogOut, Sparkles, UsersRound, Video } from 'lucide-react';
+import { AudioLines, BookOpen, Flag, Image, LogOut, Sparkles, UsersRound, Video } from 'lucide-react';
 import { fetchAuthSession, signOut } from 'aws-amplify/auth';
 import { authConfigured, configureAuth } from '../lib/auth';
 import { LoadingScreen } from './admin-ui';
@@ -11,6 +11,7 @@ const links = [
   { href: '/', label: 'Characters', Icon: UsersRound },
   { href: '/lores', label: 'Lore archive', Icon: BookOpen },
   { href: '/videos', label: 'Videos', Icon: Video },
+  { href: '/sounds', label: 'Soundboard', Icon: AudioLines },
   { href: '/profile-avatars', label: 'Profile images', Icon: Image },
   { href: '/chat-reports', label: 'Chat reports', Icon: Flag },
 ];
