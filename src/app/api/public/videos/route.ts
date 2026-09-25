@@ -12,13 +12,21 @@ export async function GET(request: Request) {
   if (!adminDb) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503, headers });
   const url = new URL(request.url);
   const limit = Math.min(18, Math.max(1, Number(url.searchParams.get('limit')) || 8));
-  const sort = url.searchParams.get('sort');
-  if (sort === 'upvotes') {
+  const sort = url.searchParams.get('sort') ?? 'upvotes';
+  if (sort !== 'newest') {
     const snapshot = await adminDb.collection('videos').where('status', '==', 'Published').get();
-    const page = snapshot.docs.sort((a, b) => (b.data().upvotes ?? 0) - (a.data().upvotes ?? 0)).slice(0, limit);
+    const ordered = snapshot.docs.sort((a, b) =>
+      (b.data().upvotes ?? 0) - (a.data().upvotes ?? 0)
+      || (b.data().createdAt?.toMillis?.() ?? 0) - (a.data().createdAt?.toMillis?.() ?? 0)
+      || a.id.localeCompare(b.id),
+    );
+    const requestedOffset = Number(url.searchParams.get('cursor'));
+    const offset = Number.isSafeInteger(requestedOffset) && requestedOffset > 0 ? requestedOffset : 0;
+    const page = ordered.slice(offset, offset + limit);
     const profiles = await playerDisplayProfiles(page.map(doc => doc.data().uploaderId).filter((id): id is string => typeof id === 'string'), new Map(page.map(doc => [doc.data().uploaderId, doc.data().uploaderEmail ?? ''])));
     const videos = await Promise.all(page.map(async doc => { const data = doc.data(), profile = typeof data.uploaderId === 'string' ? profiles.get(data.uploaderId) : undefined; return { id: doc.id, title: data.title, description: data.description ?? '', uploader: profile?.username ?? (typeof data.uploaderId === 'string' ? data.uploaderName ?? fallbackPlayerName(data.uploaderEmail ?? '') : data.uploaderName ?? data.uploaderEmail), uploaderAvatarUrl: profile?.avatarUrl ?? null, uploaderId: data.uploaderId ?? null, thumbnailUrl: await signedVideoUrl(data.thumbnailKey), upvotes: data.upvotes ?? 0, downvotes: data.downvotes ?? 0, commentCount: data.commentCount ?? 0, createdAt: data.createdAt?.toDate?.().toISOString() ?? null }; }));
-    return NextResponse.json({ videos, nextCursor: null }, { headers });
+    const nextCursor = offset + page.length < ordered.length ? offset + page.length : null;
+    return NextResponse.json({ videos, nextCursor }, { headers });
   }
   const cursor = Number(url.searchParams.get('cursor'));
   let query = adminDb.collection('videos').orderBy('createdAt', 'desc').limit(limit + 1);

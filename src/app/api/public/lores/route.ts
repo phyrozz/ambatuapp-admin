@@ -5,7 +5,7 @@ import { signedCharacterImageUrl } from '../../../../lib/s3-images';
 export const runtime = 'nodejs';
 const headers = { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=30' };
 type Translation = { locale?: string; label?: string; title?: string; text?: string };
-type LoreDocument = { id: string; title?: string; text?: string; translations?: Translation[]; tags?: string[]; imageKeys?: string[]; upvotes?: number; downvotes?: number; commentCount?: number };
+type LoreDocument = { id: string; title?: string; text?: string; translations?: Translation[]; tags?: string[]; imageKeys?: string[]; upvotes?: number; downvotes?: number; commentCount?: number; createdAt?: { toMillis?: () => number } | null };
 
 export async function GET(request: Request) {
   if (!adminDb) return NextResponse.json({ error: 'Lore service is not configured.' }, { status: 503, headers });
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   const query = (url.searchParams.get('q') ?? '').trim().toLowerCase();
   const selectedTags = url.searchParams.getAll('tag').map(tag => tag.trim().toLowerCase()).filter(Boolean);
   const language = (url.searchParams.get('language') ?? '').trim().toLowerCase();
-  const sort = url.searchParams.get('sort');
+  const sort = url.searchParams.get('sort') ?? 'upvotes';
   const snapshot = await adminDb.collection('lores').where('status', '==', 'Published').get();
   const all: LoreDocument[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
@@ -32,7 +32,9 @@ export async function GET(request: Request) {
       && (!language || language === 'original' || translations.some(entry => entry.locale?.toLowerCase() === language));
   });
 
-  const ordered = sort === 'upvotes' ? [...filtered].sort((a, b) => (b.upvotes ?? 0) - (a.upvotes ?? 0)) : filtered;
+  const ordered = sort === 'newest'
+    ? [...filtered].sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0) || a.id.localeCompare(b.id))
+    : [...filtered].sort((a, b) => (b.upvotes ?? 0) - (a.upvotes ?? 0) || (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0) || a.id.localeCompare(b.id));
   const lores = await Promise.all(ordered.map(async item => {
     const keys = Array.isArray(item.imageKeys) ? item.imageKeys.filter((key): key is string => typeof key === 'string') : [];
     return { id: item.id, title: item.title, text: item.text, translations: item.translations ?? [], tags: item.tags ?? [], imageUrls: await Promise.all(keys.map(signedCharacterImageUrl)), upvotes: item.upvotes ?? 0, downvotes: item.downvotes ?? 0, commentCount: item.commentCount ?? 0 };
