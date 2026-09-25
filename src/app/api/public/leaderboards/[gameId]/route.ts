@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '../../../../../lib/firebase-admin';
-import { playerNames } from '../../../../../lib/player-profiles';
+import { playerDisplayProfiles } from '../../../../../lib/player-profiles';
 
 export const runtime = 'nodejs';
 const headers = {
@@ -33,10 +33,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ gam
   if (!gameIds.has(gameId)) return json({ error: 'Unknown game.' }, 404);
   if (!adminDb) return json({ error: 'Leaderboard service is not configured.' }, 503);
   const snapshot = await adminDb.collection('leaderboards').doc(gameId).collection('entries').orderBy('score', 'desc').orderBy('updatedAt', 'asc').limit(20).get();
-  const names = await playerNames(snapshot.docs.map((doc) => doc.id), new Map(snapshot.docs.map((doc) => [doc.id, doc.data().player ?? 'Player'])));
+  const profiles = await playerDisplayProfiles(snapshot.docs.map((doc) => doc.id), new Map(snapshot.docs.map((doc) => [doc.id, doc.data().player ?? 'Player'])));
   return json({ entries: snapshot.docs.map((doc, index) => {
     const entry = doc.data();
-    return { rank: index + 1, player: names.get(doc.id) ?? entry.player, score: entry.score, updatedAt: entry.updatedAt?.toDate?.().toISOString() ?? null };
+    const profile = profiles.get(doc.id);
+    return { rank: index + 1, player: profile?.username ?? entry.player, avatarUrl: profile?.avatarUrl ?? null, score: entry.score, updatedAt: entry.updatedAt?.toDate?.().toISOString() ?? null };
   }) });
 }
 

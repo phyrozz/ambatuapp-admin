@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../lib/player-auth';
 import { fallbackPlayerName } from '../../../../lib/player-profiles';
+import { profileAvatarUrl } from '../../../../lib/profile-avatars';
 
 const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type, authorization', 'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS', 'Cache-Control': 'no-store' };
 const usernamePattern = /^[\p{L}\p{N}][\p{L}\p{N} _-]{1,23}$/u;
@@ -24,7 +25,8 @@ export async function GET(request: Request) {
     if (!adminDb) throw new Error('Player profile service is not configured.');
     const player = await requirePlayer(request);
     const data = (await adminDb.collection('playerProfiles').doc(player.id).get()).data();
-    return json({ username: typeof data?.username === 'string' ? data.username : fallbackPlayerName(player.email), birthDate: typeof data?.birthDate === 'string' ? data.birthDate : null });
+    const moderation = await adminDb.collection('profileAvatarModeration').doc(player.id).get();
+    return json({ username: typeof data?.username === 'string' ? data.username : fallbackPlayerName(player.email), birthDate: typeof data?.birthDate === 'string' ? data.birthDate : null, avatarType: data?.avatarType ?? null, avatarId: data?.avatarId ?? null, avatarUrl: await profileAvatarUrl(typeof data?.avatarKey === 'string' ? data.avatarKey : undefined), avatarRemoved: moderation.data()?.status === 'removed' });
   } catch (error) { return json({ error: error instanceof Error ? error.message : 'Could not load profile.' }, 401); }
 }
 
