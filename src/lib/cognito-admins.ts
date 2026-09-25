@@ -22,7 +22,9 @@ function userPoolId() {
 function cognito() {
   if (client) return client;
   const poolId = userPoolId();
-  const region = process.env.AWS_REGION || process.env.NEXT_PUBLIC_AWS_REGION || poolId.split('_')[0];
+  // The generic AWS_REGION can be the hosting region, which may differ from
+  // the Cognito user pool region. Cognito user pool IDs include their region.
+  const region = poolId.split('_')[0];
   client = new CognitoIdentityProviderClient({ region });
   return client;
 }
