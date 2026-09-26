@@ -48,24 +48,105 @@ async function waitForVideoCompression(sourceKey: string, videoKey: string) {
   throw new Error('Video compression timed out.');
 }
 
+function waitForVideoMetadata(video: HTMLVideoElement) {
+  return new Promise<void>((resolve, reject) => {
+    const finish = (error?: Error) => {
+      window.clearTimeout(timeout);
+      video.removeEventListener('loadedmetadata', onLoaded);
+      video.removeEventListener('error', onError);
+      if (error) reject(error);
+      else resolve();
+    };
+    const onLoaded = () => finish();
+    const onError = () => finish(new Error('Could not create a thumbnail from this video.'));
+    const timeout = window.setTimeout(() => finish(new Error('Could not create a thumbnail from this video.')), 10000);
+    video.addEventListener('loadedmetadata', onLoaded, { once: true });
+    video.addEventListener('error', onError, { once: true });
+    video.load();
+  });
+}
+
+function seekVideo(video: HTMLVideoElement, time: number) {
+  return new Promise<void>((resolve, reject) => {
+    const finish = (error?: Error) => {
+      window.clearTimeout(timeout);
+      video.removeEventListener('seeked', onSeeked);
+      video.removeEventListener('error', onError);
+      if (error) reject(error);
+      else resolve();
+    };
+    const onSeeked = () => finish();
+    const onError = () => finish(new Error('Could not create a thumbnail from this video.'));
+    const timeout = window.setTimeout(() => finish(new Error('Could not create a thumbnail from this video.')), 10000);
+    video.addEventListener('seeked', onSeeked, { once: true });
+    video.addEventListener('error', onError, { once: true });
+    try { video.currentTime = time; }
+    catch { finish(new Error('Could not create a thumbnail from this video.')); }
+  });
+}
+
+async function waitForVideoFrame(video: HTMLVideoElement) {
+  const frameVideo = video as HTMLVideoElement & { requestVideoFrameCallback?: (callback: () => void) => number };
+  if (frameVideo.requestVideoFrameCallback) {
+    await new Promise<void>(resolve => {
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        window.clearTimeout(timeout);
+        resolve();
+      };
+      const timeout = window.setTimeout(finish, 300);
+      frameVideo.requestVideoFrameCallback?.(finish);
+    });
+  }
+  await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+}
+
+function hasVisiblePixels(frame: ImageData) {
+  const stepX = Math.max(1, Math.floor(frame.width / 8));
+  const stepY = Math.max(1, Math.floor(frame.height / 6));
+  let samples = 0, visible = 0;
+  for (let y = Math.floor(stepY / 2); y < frame.height; y += stepY) {
+    for (let x = Math.floor(stepX / 2); x < frame.width; x += stepX) {
+      const offset = (y * frame.width + x) * 4;
+      const brightness = (frame.data[offset] * 299 + frame.data[offset + 1] * 587 + frame.data[offset + 2] * 114) / 1000;
+      samples++;
+      if (brightness > 22) visible++;
+    }
+  }
+  return visible >= Math.min(2, samples);
+}
+
 async function thumbnailFromVideo(file: File) {
   const url = URL.createObjectURL(file);
   const video = document.createElement('video');
   video.muted = true;
   video.playsInline = true;
-  video.preload = 'metadata';
+  video.preload = 'auto';
   video.src = url;
   try {
-    await new Promise<void>((resolve, reject) => {
-      video.onloadedmetadata = () => { video.currentTime = Math.min(1, Math.max(0, video.duration / 4)); };
-      video.onseeked = () => resolve();
-      video.onerror = () => reject(new Error('Could not create a thumbnail from this video.'));
-    });
+    await waitForVideoMetadata(video);
+    if (!Number.isFinite(video.duration) || video.duration <= 0 || !video.videoWidth || !video.videoHeight) throw new Error('Could not create a thumbnail from this video.');
     const ratio = Math.min(1, 720 / video.videoWidth);
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(video.videoWidth * ratio));
     canvas.height = Math.max(1, Math.round(video.videoHeight * ratio));
-    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('Could not create a thumbnail from this video.');
+    const lastFrameTime = Math.max(0, video.duration - Math.min(.04, video.duration / 10));
+    const times = [...new Set([Math.min(1, video.duration / 4), video.duration * .4, video.duration * .6, video.duration * .8].map(time => Math.min(lastFrameTime, Math.max(0, time))))];
+    let selectedFrame: ImageData | null = null;
+    for (const time of times) {
+      await seekVideo(video, time);
+      await waitForVideoFrame(video);
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+      if (!selectedFrame || hasVisiblePixels(frame)) selectedFrame = frame;
+      if (hasVisiblePixels(frame)) break;
+    }
+    if (!selectedFrame) throw new Error('Could not create a thumbnail from this video.');
+    context.putImageData(selectedFrame, 0, 0);
     return await new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not create a thumbnail from this video.')), 'image/jpeg', .82));
   } finally {
     URL.revokeObjectURL(url);
