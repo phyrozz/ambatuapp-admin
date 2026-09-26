@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../../lib/api-auth';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { adminUploadKeys, deleteVideoAssets, hydrateVideo, videoFields } from '../../../../lib/admin-video';
+import { headVideoObject, VIDEO_COMPRESSION_VERSION } from '../../../../lib/video-transcoding.mjs';
 
 export const runtime = 'nodejs';
 type Context = { params: Promise<{ id: string }> };
@@ -18,6 +19,10 @@ export async function PATCH(request: Request, { params }: Context) {
     const body = await request.json();
     const fields = videoFields(body);
     const keys = body.videoKey || body.thumbnailKey ? adminUploadKeys(body) : {};
+    if ('videoKey' in keys) {
+      const uploadedVideo = await headVideoObject(keys.videoKey as string);
+      if (uploadedVideo.Metadata?.['ambatu-compression'] !== VIDEO_COMPRESSION_VERSION || uploadedVideo.ContentType !== 'video/mp4') throw new Error('Wait for video compression to finish.');
+    }
     await ref.update({ ...fields, ...keys, updatedAt: FieldValue.serverTimestamp() });
     if ('videoKey' in keys) await deleteVideoAssets(snapshot.data() ?? {});
     return NextResponse.json(await hydrateVideo(id, (await ref.get()).data() ?? {}));

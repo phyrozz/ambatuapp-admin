@@ -16,7 +16,7 @@ export function videoFields(body: Record<string, unknown>) {
 export function adminUploadKeys(body: Record<string, unknown>) {
   const videoKey = body.videoKey;
   const thumbnailKey = body.thumbnailKey;
-  if (typeof videoKey !== 'string' || !/^videos\/admin\/[a-f0-9-]+\.(mp4|webm|mov)$/.test(videoKey)) throw new Error('Upload a video first.');
+  if (typeof videoKey !== 'string' || !/^videos\/admin\/[a-f0-9-]+\.mp4$/.test(videoKey)) throw new Error('Upload a video first.');
   if (typeof thumbnailKey !== 'string' || !/^video-thumbnails\/admin\/[a-f0-9-]+\.jpg$/.test(thumbnailKey)) throw new Error('Upload a thumbnail first.');
   if (videoKey.split('/').at(-1)?.split('.')[0] !== thumbnailKey.split('/').at(-1)?.split('.')[0]) throw new Error('Video and thumbnail do not match.');
   return { videoKey, thumbnailKey };

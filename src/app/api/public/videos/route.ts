@@ -4,6 +4,7 @@ import { adminDb } from '../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../lib/player-auth';
 import { signedVideoUrl } from '../../../../lib/s3-videos';
 import { fallbackPlayerName, playerDisplayProfiles } from '../../../../lib/player-profiles';
+import { headVideoObject, VIDEO_COMPRESSION_VERSION } from '../../../../lib/video-transcoding.mjs';
 
 const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type, authorization', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Cache-Control': 'no-store' };
 export function OPTIONS() { return new NextResponse(null, { headers }); }
@@ -50,8 +51,10 @@ export async function POST(request: Request) {
     const { title, description, videoKey, thumbnailKey } = await request.json();
     if (typeof title !== 'string' || !title.trim() || title.length > 120) throw new Error('Enter a title up to 120 characters.');
     if (typeof description !== 'string' || description.length > 1000) throw new Error('Description is too long.');
-    if (typeof videoKey !== 'string' || !videoKey.startsWith(`videos/${player.id}/`)) throw new Error('Invalid video upload.');
+    if (typeof videoKey !== 'string' || !videoKey.startsWith(`videos/${player.id}/`) || !videoKey.endsWith('.mp4')) throw new Error('Invalid video upload.');
     if (typeof thumbnailKey !== 'string' || !thumbnailKey.startsWith(`video-thumbnails/${player.id}/`)) throw new Error('Invalid video thumbnail.');
+    const uploadedVideo = await headVideoObject(videoKey);
+    if (uploadedVideo.Metadata?.['ambatu-compression'] !== VIDEO_COMPRESSION_VERSION || uploadedVideo.ContentType !== 'video/mp4') throw new Error('Wait for video compression to finish.');
     const profile = (await playerDisplayProfiles([player.id], new Map([[player.id, player.email]]))).get(player.id);
     const data = { title: title.trim(), description: description.trim(), videoKey, thumbnailKey, uploaderEmail: player.email, uploaderName: profile?.username ?? fallbackPlayerName(player.email), uploaderId: player.id, status: 'Published', upvotes: 0, downvotes: 0, commentCount: 0, createdAt: FieldValue.serverTimestamp() };
     const ref = await adminDb.collection('videos').add(data);

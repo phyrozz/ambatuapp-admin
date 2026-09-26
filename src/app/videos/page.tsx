@@ -30,6 +30,24 @@ async function api(path: string, options?: RequestInit) {
   return fetch(path, { ...options, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...options?.headers } });
 }
 
+const pause = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+async function waitForVideoCompression(sourceKey: string, videoKey: string) {
+  const start = await api('/api/videos/transcode', { method: 'POST', body: JSON.stringify({ sourceKey, videoKey }) });
+  const created = await start.json();
+  if (!start.ok) throw new Error(created.error || 'Could not start video compression.');
+  const deadline = Date.now() + 30 * 60 * 1000;
+  while (Date.now() < deadline) {
+    await pause(5000);
+    const response = await api(`/api/videos/transcode?jobId=${encodeURIComponent(created.jobId)}`, { method: 'GET' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not check video compression.');
+    if (result.status === 'COMPLETE' && result.videoKey === videoKey) return;
+    if (result.status === 'ERROR' || result.status === 'CANCELED') throw new Error(result.error || 'Video compression failed.');
+  }
+  throw new Error('Video compression timed out.');
+}
+
 async function thumbnailFromVideo(file: File) {
   const url = URL.createObjectURL(file);
   const video = document.createElement('video');
@@ -57,13 +75,13 @@ async function thumbnailFromVideo(file: File) {
 async function uploadVideo(file: File) {
   if (file.size > MAX_VIDEO_BYTES) throw new Error('Videos must be 200 MB or smaller.');
   const thumbnail = await thumbnailFromVideo(file);
-  const response = await api('/api/videos/presign', { method: 'POST', body: JSON.stringify({ fileName: file.name, contentType: file.type }) });
+  const response = await api('/api/videos/presign', { method: 'POST', body: JSON.stringify({ fileName: file.name, contentType: file.type, fileSize: file.size }) });
   const signed = await response.json();
   if (!response.ok) throw new Error(signed.error || 'Could not prepare upload.');
   let uploads: Response[];
   try {
     uploads = await Promise.all([
-      fetch(signed.videoUploadUrl, { method: 'PUT', headers: signed.videoUploadHeaders, body: file }),
+      fetch(signed.sourceUploadUrl, { method: 'PUT', headers: signed.sourceUploadHeaders, body: file }),
       fetch(signed.thumbnailUploadUrl, { method: 'PUT', headers: signed.thumbnailUploadHeaders, body: thumbnail }),
     ]);
   } catch {
@@ -71,6 +89,7 @@ async function uploadVideo(file: File) {
   }
   const failed = uploads.find(item => !item.ok);
   if (failed) throw new Error(`Video upload failed (${failed.status}).`);
+  await waitForVideoCompression(signed.sourceKey, signed.videoKey);
   return { videoKey: signed.videoKey as string, thumbnailKey: signed.thumbnailKey as string };
 }
 

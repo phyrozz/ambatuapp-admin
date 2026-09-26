@@ -6,6 +6,20 @@ The chat report queue is at `/chat-reports`. Set server-only `CHAT_TABLE` and `C
 
 The soundboard catalog is managed at `/sounds`. Audio is stored under `soundboard/` in `AWS_S3_CHARACTER_IMAGES_BUCKET`; grant the admin runtime S3 `PutObject` and `GetObject` permissions for that prefix, and allow `PUT` from the admin app origin in the bucket CORS policy. The public API exposes catalog metadata and redirects playback through short lived S3 URLs. Point the revamp app's `NEXT_PUBLIC_CHARACTER_API_URL` to the admin public API base ending in `/api/public` so the same catalog is available in AmbatuChat and Soundboard. To move the 26 bundled legacy clips into Firestore and S3 while keeping their current IDs for old chat messages, run `npm run seed:sounds` once from this directory after configuring `.env.local`. The script skips IDs already in `soundboardSounds`, so it can be safely rerun after a partial import.
 
+## AmbatuWatch video compression
+
+Both the AmbatuWatch uploader and the admin video editor keep the 200 MB source-file limit. They upload the original into the private `video-upload-staging/` prefix, then use AWS Elemental MediaConvert to write an H.264/AAC MP4 capped at 1280×720 into `videos/`. The API only saves video records after MediaConvert succeeds; original staging files and temporary outputs are deleted after finalization. `infra/ambatuwatch-mediaconvert.yaml` creates the MediaConvert service role and a managed policy for the admin runtime and migration command. Deploy it with the bucket name:
+
+```powershell
+aws cloudformation deploy --template-file infra/ambatuwatch-mediaconvert.yaml --stack-name ambatuwatch-mediaconvert --parameter-overrides "VideoBucketName=YOUR_BUCKET_NAME" --capabilities CAPABILITY_NAMED_IAM
+```
+
+Deploy the stack in the S3 bucket's region, and keep `AWS_REGION` or `NEXT_PUBLIC_AWS_REGION` set to that same region. Attach the stack's `AppVideoPolicyArn` output to the admin runtime role and to the AWS identity used for the migration. Set the `MediaConvertRoleArn` output as `AWS_MEDIACONVERT_ROLE_ARN` in the admin environment and in `admin/.env.local`. The policy includes `mediaconvert:CreateJob`, `mediaconvert:GetJob`, endpoint discovery, `iam:PassRole` limited to the MediaConvert role, and the S3 access used by uploads and migration. `AWS_MEDIACONVERT_ENDPOINT` is optional; without it, the runtime discovers the account endpoint. `AWS_MEDIACONVERT_QUEUE_ARN` can select a non-default queue.
+
+Add S3 lifecycle expiration after seven days for `video-upload-staging/` and `video-processing/` to clean up abandoned uploads and failed jobs. The bucket CORS policy must allow `PUT` from both the player app and admin origins. If the bucket uses a customer-managed KMS key for default encryption, grant the MediaConvert role the matching KMS decrypt/data-key permissions.
+
+To convert the existing video objects, configure `.env.local` with the bucket, AWS credentials/region, MediaConvert role, and Firebase service-account values. Run `npm run compress:videos` for a read-only inventory first. Run `npm run compress:videos -- --apply` to transcode each unconverted object, update every matching document in Firestore's `videos` collection, and remove the original after its references point to the MP4. The command is resumable: it skips MP4s marked with the `ambatu-compression` metadata and can finish a partially completed migration on a later run. It scans video content types and common video extensions under `videos/`. MediaConvert charges for output duration and encoding settings; check [AWS MediaConvert pricing](https://aws.amazon.com/mediaconvert/pricing/) before applying the migration.
+
 Profile saves also reserve case-insensitive usernames in the `playerUsernameClaims` Firestore collection. Run the player search backfill before enabling this check so previously saved usernames have `usernameLower`; the save route checks those profiles and claims new names atomically. Existing duplicate usernames must be changed to unique names when those users next save their profiles.
 
 The standalone Next.js admin console for managing Ambaverse characters. Run it with:

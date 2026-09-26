@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "seed:sounds": "node --env-file=.env.local scripts/seed-legacy-sounds.mjs",
     "seed:characters": "node --env-file=.env.local scripts/seed-legacy-characters.mjs",
+    "compress:videos": "node --env-file=.env.local scripts/compress-videos.mjs",
     "backfill:player-search": "node --env-file=.env.local scripts/backfill-player-search.mjs"
   },
   "dependencies": {
@@ -17,6 +18,7 @@
     "@aws-amplify/core": "^6.11.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.1141.0",
     "@aws-sdk/client-dynamodb": "^3.1138.0",
+    "@aws-sdk/client-mediaconvert": "3.1141.0",
     "@aws-sdk/client-s3": "^3.800.0",
     "@aws-sdk/lib-dynamodb": "^3.1138.0",
     "@aws-sdk/s3-request-presigner": "^3.800.0",

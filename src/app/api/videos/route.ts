@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../lib/api-auth';
 import { adminDb } from '../../../lib/firebase-admin';
 import { adminUploadKeys, hydrateVideo, videoFields } from '../../../lib/admin-video';
+import { headVideoObject, VIDEO_COMPRESSION_VERSION } from '../../../lib/video-transcoding.mjs';
 
 export const runtime = 'nodejs';
 
@@ -25,6 +26,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const fields = videoFields(body);
     const keys = adminUploadKeys(body);
+    const uploadedVideo = await headVideoObject(keys.videoKey);
+    if (uploadedVideo.Metadata?.['ambatu-compression'] !== VIDEO_COMPRESSION_VERSION || uploadedVideo.ContentType !== 'video/mp4') throw new Error('Wait for video compression to finish.');
     const stored = { ...fields, ...keys, uploaderEmail: 'Ambatu Admin', uploaderId: 'admin', upvotes: 0, downvotes: 0, commentCount: 0, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() };
     const ref = await adminDb.collection('videos').add(stored);
     return NextResponse.json(await hydrateVideo(ref.id, (await ref.get()).data() ?? {}), { status: 201 });

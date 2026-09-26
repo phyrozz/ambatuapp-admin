@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Least-privilege IAM resources for AmbatuWatch MP4 compression.
+
+Parameters:
+  VideoBucketName:
+    Type: String
+    Description: Existing private bucket configured as AWS_S3_CHARACTER_IMAGES_BUCKET.
+
+Resources:
+  MediaConvertServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-MediaConvert'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: mediaconvert.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AmbatuWatchVideoObjects
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${VideoBucketName}'
+                Condition:
+                  StringLike:
+                    s3:prefix:
+                      - video-upload-staging/*
+                      - videos/*
+                      - video-processing/*
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:s3:::${VideoBucketName}/video-upload-staging/*'
+                  - !Sub 'arn:${AWS::Partition}:s3:::${VideoBucketName}/videos/*'
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${VideoBucketName}/video-processing/*'
+
+  AmbatuWatchAppVideoPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub '${AWS::StackName}-AppVideoPolicy'
+      Description: Attach to the Ambatu Admin runtime role and local migration role.
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: StartAndCheckMediaConvertJobs
+            Effect: Allow
+            Action:
+              - mediaconvert:CreateJob
+              - mediaconvert:GetJob
+            Resource: '*'
+          - Sid: DiscoverMediaConvertEndpoint
+            Effect: Allow
+            Action: mediaconvert:DescribeEndpoints
+            Resource: '*'
+          - Sid: PassOnlyTheAmbatuWatchRole
+            Effect: Allow
+            Action: iam:PassRole
+            Resource: !GetAtt MediaConvertServiceRole.Arn
+            Condition:
+              StringEquals:
+                iam:PassedToService: mediaconvert.amazonaws.com
+          - Sid: ListVideoPrefixes
+            Effect: Allow
+            Action: s3:ListBucket
+            Resource: !Sub 'arn:${AWS::Partition}:s3:::${VideoBucketName}'
+            Condition:
+              StringLike:
+                s3:prefix:
+                  - videos/*
+                  - video-upload-staging/*
+                  - video-processing/*
+                  - video-thumbnails/*
+          - Sid: ReadWriteAndDeleteVideoObjects
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:s3:::${VideoBucketName}/videos/*'
+              - !Sub 'arn:${AWS::Partition}:s3:::${VideoBucketName}/video-upload-staging/*'
+              - !Sub 'arn:${AWS::Partition}:s3:::${VideoBucketName}/video-processing/*'
+              - !Sub 'arn:${AWS::Partition}:s3:::${VideoBucketName}/video-thumbnails/*'
+
+Outputs:
+  MediaConvertRoleArn:
+    Description: Set as AWS_MEDIACONVERT_ROLE_ARN in the admin runtime and migration environment.
+    Value: !GetAtt MediaConvertServiceRole.Arn
+  AppVideoPolicyArn:
+    Description: Attach this managed policy to the admin runtime role and migration role.
+    Value: !Ref AmbatuWatchAppVideoPolicy
