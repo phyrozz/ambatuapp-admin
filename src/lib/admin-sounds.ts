@@ -24,5 +24,6 @@ export function soundResponse(id: string, data: Record<string, unknown>, audioUr
     color: soundColor(data.color, 0),
     audioUrl,
     createdAt: (data.createdAt as { toDate?: () => Date } | undefined)?.toDate?.().toISOString() ?? null,
+    playCount: typeof data.playCount === 'number' && Number.isSafeInteger(data.playCount) && data.playCount >= 0 ? data.playCount : 0,
   };
 }
