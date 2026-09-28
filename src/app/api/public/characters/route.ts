@@ -28,6 +28,7 @@ export async function GET(request: Request) {
   const requestedLimit = Number(url.searchParams.get('limit')) || 12;
   const limit = Math.min(50, Math.max(1, Math.floor(requestedLimit)));
   const search = (url.searchParams.get('q') ?? '').trim().toLowerCase();
+  const sort = url.searchParams.get('sort') === 'nameDesc' ? 'nameDesc' : 'nameAsc';
 
   if (!paginated) {
     const snapshot = await adminDb.collection('characters').where('status', '==', 'Published').get();
@@ -39,7 +40,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ characters: characters.sort((a, b) => String(a.name).localeCompare(String(b.name))) }, { headers });
   }
 
-  const cursorKey = JSON.stringify({ search, limit });
+  const cursorKey = JSON.stringify({ search, limit, sort });
   const encodedCursor = url.searchParams.get('cursor');
   let cursor: { name: string; id: string } | null = null;
   if (encodedCursor) {
@@ -53,10 +54,11 @@ export async function GET(request: Request) {
   }
 
   const collection = adminDb.collection('characters');
+  const direction = sort === 'nameDesc' ? 'desc' : 'asc';
   const matches: Array<{ id: string; name: string; data: Record<string, unknown> }> = [];
   let scanAfter = cursor;
   while (matches.length <= limit) {
-    let query = collection.orderBy('name').orderBy(FieldPath.documentId()).limit(limit + 1);
+    let query = collection.orderBy('name', direction).orderBy(FieldPath.documentId(), direction).limit(limit + 1);
     if (scanAfter) query = query.startAfter(scanAfter.name, scanAfter.id);
     const snapshot = await query.get();
     if (!snapshot.docs.length) {

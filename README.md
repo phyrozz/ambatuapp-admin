@@ -8,6 +8,8 @@ The soundboard catalog is managed at `/sounds`. Audio is stored under `soundboar
 
 ## AmbatuWatch video compression
 
+AmbatuWatch's Relevance sort gives a video uploaded in the last seven days a freshness bonus of up to five points, fading to zero over the week. Each batch compares its newest eligible upload with the highest-engagement video, then fills remaining positions by engagement. Deploy its Firestore indexes from this directory with `firebase deploy --only firestore:indexes --project YOUR_FIREBASE_PROJECT_ID` before enabling the sort in production.
+
 Both the AmbatuWatch uploader and the admin video editor keep the 200 MB source-file limit. They upload the original into the private `video-upload-staging/` prefix, then use AWS Elemental MediaConvert to write an H.264/AAC MP4 capped at 1280×720 into `videos/`. The API only saves video records after MediaConvert succeeds; original staging files and temporary outputs are deleted after finalization. `infra/ambatuwatch-mediaconvert.yaml` creates the MediaConvert service role and a managed policy for the admin runtime and migration command. Deploy it with the bucket name:
 
 ```powershell
