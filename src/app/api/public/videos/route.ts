@@ -19,8 +19,10 @@ type RelevanceFeedCursor = { version: 1; asOf: number; popular: PopularCursor | 
 function timestampCursor(doc: { id: string; data: () => { createdAt?: { seconds?: number; nanoseconds?: number } } }): TimestampCursor | null {
   const data = doc.data();
   const createdAt = data.createdAt;
-  if (!Number.isSafeInteger(createdAt?.seconds) || !Number.isInteger(createdAt?.nanoseconds)) return null;
-  return { seconds: createdAt.seconds!, nanoseconds: createdAt.nanoseconds!, id: doc.id };
+  const seconds = createdAt?.seconds;
+  const nanoseconds = createdAt?.nanoseconds;
+  if (typeof seconds !== 'number' || !Number.isSafeInteger(seconds) || typeof nanoseconds !== 'number' || !Number.isInteger(nanoseconds)) return null;
+  return { seconds, nanoseconds, id: doc.id };
 }
 
 function popularCursor(doc: { id: string; data: () => { upvotes?: number; commentCount?: number; createdAt?: { seconds?: number; nanoseconds?: number } } }): PopularCursor | null {
