@@ -2,6 +2,7 @@ import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../lib/player-auth';
+import { fallbackPlayerName, playerDisplayProfiles } from '../../../../lib/player-profiles';
 import { signedVideoUrl } from '../../../../lib/s3-videos';
 
 const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization', 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Cache-Control': 'no-store' };
@@ -25,10 +26,17 @@ export async function GET(request: Request) {
     if (cursor) query = query.startAfter(new Timestamp(cursor.seconds, cursor.nanoseconds), cursor.id);
     const snapshot = await query.get();
     const page = snapshot.docs.slice(0, 8);
-    const videos = await Promise.all(page.filter(doc => doc.data().status === 'Published' && doc.data().videoKey).map(async doc => {
+    const published = page.filter(doc => doc.data().status === 'Published' && doc.data().videoKey);
+    const profiles = await playerDisplayProfiles(
+      published.map(doc => doc.data().uploaderId).filter((id): id is string => typeof id === 'string' && id !== 'admin'),
+      new Map(published.map(doc => [doc.data().uploaderId, doc.data().uploaderEmail ?? ''])),
+    );
+    const videos = await Promise.all(published.map(async doc => {
       const data = doc.data();
+      const uploaderId = typeof data.uploaderId === 'string' && data.uploaderId !== 'admin' ? data.uploaderId : null;
+      const profile = uploaderId ? profiles.get(uploaderId) : undefined;
       const vote = (await doc.ref.collection('votes').doc(`user:${player.id}`).get()).data()?.value;
-      return { id: doc.id, title: data.title, description: data.description ?? '', videoUrl: await signedVideoUrl(data.videoKey), thumbnailUrl: await signedVideoUrl(data.thumbnailKey), upvotes: data.upvotes ?? 0, downvotes: data.downvotes ?? 0, commentCount: data.commentCount ?? 0, userVote: vote === 1 || vote === -1 ? vote : 0 };
+      return { id: doc.id, title: data.title, description: data.description ?? '', uploader: profile?.username ?? data.uploaderName ?? fallbackPlayerName(data.uploaderEmail ?? ''), uploaderId, uploaderAvatarUrl: profile?.avatarUrl ?? null, videoUrl: await signedVideoUrl(data.videoKey), thumbnailUrl: await signedVideoUrl(data.thumbnailKey), upvotes: data.upvotes ?? 0, downvotes: data.downvotes ?? 0, commentCount: data.commentCount ?? 0, userVote: vote === 1 || vote === -1 ? vote : 0 };
     }));
     const last = page.at(-1);
     const time = last?.data().createdAt;
