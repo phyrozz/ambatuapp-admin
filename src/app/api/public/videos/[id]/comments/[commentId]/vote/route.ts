@@ -1,6 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../../../../../lib/firebase-admin';
+import { playerFromRequest } from '../../../../../../../../lib/player-auth';
 
 const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type, authorization', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Cache-Control': 'no-store' };
 export function OPTIONS() { return new NextResponse(null, { headers }); }
@@ -10,10 +11,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!adminDb) throw new Error('Video service is not configured.');
     const { id, commentId } = await params;
     const { anonymousId, value } = await request.json();
-    if (typeof anonymousId !== 'string' || anonymousId.length < 12 || anonymousId.includes('/') || ![1, -1].includes(value)) throw new Error('Invalid vote.');
+    const player = await playerFromRequest(request);
+    if ((!player && (typeof anonymousId !== 'string' || anonymousId.length < 12 || anonymousId.includes('/'))) || ![1, -1].includes(value)) throw new Error('Invalid vote.');
     const video = adminDb.collection('videos').doc(id);
     const comment = video.collection('comments').doc(commentId);
-    const vote = comment.collection('votes').doc(anonymousId);
+    const vote = comment.collection('votes').doc(player ? `user:${player.id}` : anonymousId);
     const result = await adminDb.runTransaction(async transaction => {
       const [videoSnapshot, commentSnapshot, voteSnapshot] = await Promise.all([transaction.get(video), transaction.get(comment), transaction.get(vote)]);
       if (videoSnapshot.data()?.status !== 'Published') throw new Error('Video not found.');

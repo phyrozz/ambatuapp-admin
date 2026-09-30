@@ -42,9 +42,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!adminDb) throw new Error('Video service is not configured.');
     const { id } = await params;
     const { text, anonymousId, parentId } = await request.json();
-    if (typeof text !== 'string' || !text.trim() || text.length > 1000 || typeof anonymousId !== 'string' || anonymousId.length < 12 || anonymousId.includes('/')) throw new Error('Invalid comment.');
-    if (parentId !== undefined && (typeof parentId !== 'string' || !parentId.trim())) throw new Error('Invalid reply target.');
     const player = await playerFromRequest(request);
+    if (typeof text !== 'string' || !text.trim() || text.length > 1000 || (!player && (typeof anonymousId !== 'string' || anonymousId.length < 12 || anonymousId.includes('/')))) throw new Error('Invalid comment.');
+    if (parentId !== undefined && (typeof parentId !== 'string' || !parentId.trim())) throw new Error('Invalid reply target.');
     const video = adminDb.collection('videos').doc(id);
     const data = (await video.get()).data();
     if (!data || data.status !== 'Published') throw new Error('Video not found.');

@@ -1,5 +1,7 @@
 # Ambatu Admin
 
+Friend request push alerts use the chat service's push Lambda. Set server-only `CHAT_PUSH_FUNCTION_NAME` to `ambatu-chat-<stage>-push` (for example, `ambatu-chat-prod-push`) and grant the admin runtime `lambda:InvokeFunction` on it. Deploy the matching chat-service stage first. The friend-request count badge remains available without this optional push configuration.
+
 ## Chat reports and username search
 
 The chat report queue is at `/chat-reports`. Set server-only `CHAT_TABLE` and `CHAT_BUCKET` to the outputs of the chat-service CloudFormation stack, and grant the admin runtime `dynamodb:Scan`, `dynamodb:UpdateItem`, and `s3:GetObject` for that table and bucket's `chat/*` objects. Admins can restrict a reported player from chat and later unrestrict them from the separate restricted-users list. This changes only chat write access; it does not delete messages, affect other modules, or automatically resolve reports. Redeploy the chat-service Lambda to enforce restrictions. Username search uses `usernameLower` on player profiles. Run `npm run backfill:player-search` once to index existing profiles; new profile saves keep the field current.
