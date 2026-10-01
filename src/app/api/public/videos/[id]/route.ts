@@ -13,5 +13,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const profiles = typeof data.uploaderId === 'string' ? await playerDisplayProfiles([data.uploaderId], new Map([[data.uploaderId, data.uploaderEmail ?? '']])) : new Map();
   const profile = typeof data.uploaderId === 'string' ? profiles.get(data.uploaderId) : undefined;
   const uploader = profile?.username ?? (typeof data.uploaderId === 'string' ? data.uploaderName ?? fallbackPlayerName(data.uploaderEmail ?? '') : data.uploaderName ?? data.uploaderEmail);
-  return NextResponse.json({ id, title: data.title, description: data.description ?? '', uploader, uploaderAvatarUrl: profile?.avatarUrl ?? null, uploaderId: data.uploaderId ?? null, videoUrl: await signedVideoUrl(data.videoKey), upvotes: data.upvotes ?? 0, downvotes: data.downvotes ?? 0, commentCount: data.commentCount ?? 0 }, { headers });
+  return NextResponse.json({ id, title: data.title, description: data.description ?? '', uploader, uploaderAvatarUrl: profile?.avatarUrl ?? null, uploaderId: data.uploaderId ?? null, videoUrl: await signedVideoUrl(data.videoKey), thumbnailUrl: typeof data.thumbnailKey === 'string' ? await signedVideoUrl(data.thumbnailKey) : '', upvotes: data.upvotes ?? 0, downvotes: data.downvotes ?? 0, commentCount: data.commentCount ?? 0 }, { headers });
 }
