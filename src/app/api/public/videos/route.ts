@@ -163,7 +163,7 @@ export async function POST(request: Request) {
     const profile = (await playerDisplayProfiles([player.id], new Map([[player.id, player.email]]))).get(player.id);
     const data = { title: title.trim(), description: description.trim(), videoKey, thumbnailKey, uploaderEmail: player.email, uploaderName: profile?.username ?? fallbackPlayerName(player.email), uploaderId: player.id, status: 'Published', upvotes: 0, downvotes: 0, commentCount: 0, createdAt: FieldValue.serverTimestamp() };
     const ref = await adminDb.collection('videos').add(data);
-    return NextResponse.json({ id: ref.id, ...data, uploaderAvatarUrl: profile?.avatarUrl ?? null, createdAt: new Date().toISOString(), thumbnailUrl: await signedVideoUrl(thumbnailKey) }, { status: 201, headers });
+    return NextResponse.json({ id: ref.id, ...data, uploader: profile?.username ?? fallbackPlayerName(player.email), uploaderAvatarUrl: profile?.avatarUrl ?? null, videoUrl: await signedVideoUrl(videoKey), thumbnailUrl: await signedVideoUrl(thumbnailKey), userVote: 0, createdAt: new Date().toISOString() }, { status: 201, headers });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not publish video.' }, { status: 400, headers });
   }
