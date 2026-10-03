@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { requireAdmin } from '../../../../lib/api-auth';
+import { adminErrorStatus } from '../../../../lib/studio-api';
 import { bestEffortDeleteProfileAvatar } from '../../../../lib/profile-avatars';
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {

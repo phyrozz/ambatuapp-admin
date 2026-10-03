@@ -1,6 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../../lib/api-auth';
+import { adminErrorStatus } from '../../../../lib/studio-api';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { adminUploadKeys, deleteVideoAssets, hydrateVideo, videoFields } from '../../../../lib/admin-video';
 import { headVideoObject, VIDEO_COMPRESSION_VERSION } from '../../../../lib/video-transcoding.mjs';
@@ -27,7 +28,7 @@ export async function PATCH(request: Request, { params }: Context) {
     if ('videoKey' in keys) await deleteVideoAssets(snapshot.data() ?? {});
     return NextResponse.json(await hydrateVideo(id, (await ref.get()).data() ?? {}));
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not update video.' }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not update video.' }, { status: adminErrorStatus(error, 400) });
   }
 }
 
@@ -43,6 +44,6 @@ export async function DELETE(request: Request, { params }: Context) {
     await adminDb.recursiveDelete(ref);
     return NextResponse.json({ id });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not delete video.' }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not delete video.' }, { status: adminErrorStatus(error, 400) });
   }
 }

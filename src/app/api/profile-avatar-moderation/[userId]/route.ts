@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { requireAdmin } from '../../../../lib/api-auth';
+import { adminErrorStatus } from '../../../../lib/studio-api';
 import { bestEffortDeleteProfileAvatar } from '../../../../lib/profile-avatars';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ userId: string }> }) {
@@ -24,5 +25,5 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ us
     });
     await bestEffortDeleteProfileAvatar(deleteKey);
     return NextResponse.json({ ok: true });
-  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not remove profile image.' }, { status: 400 }); }
+  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not remove profile image.' }, { status: adminErrorStatus(error, 400) }); }
 }

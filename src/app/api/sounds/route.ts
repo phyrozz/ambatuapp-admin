@@ -2,6 +2,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../lib/firebase-admin';
 import { requireAdmin } from '../../../lib/api-auth';
+import { adminErrorStatus } from '../../../lib/studio-api';
 import { soundAudioUrl, soundColor, soundFields, soundResponse } from '../../../lib/admin-sounds';
 import { adminSoundUploadKey, verifySoundUpload } from '../../../lib/s3-sounds';
 
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
       .sort((a, b) => a.name.localeCompare(b.name));
     return NextResponse.json({ sounds });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not load sounds.' }, { status: 401 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not load sounds.' }, { status: adminErrorStatus(error, 401) });
   }
 }
 
@@ -39,6 +40,6 @@ export async function POST(request: Request) {
     const origin = new URL(request.url).origin;
     return NextResponse.json(soundResponse(ref.id, { ...record, createdAt: null }, soundAudioUrl(origin, ref.id)), { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not add sound.' }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not add sound.' }, { status: adminErrorStatus(error, 400) });
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../lib/firebase-admin';
 import { requireAdmin } from '../../../lib/api-auth';
+import { adminErrorStatus } from '../../../lib/studio-api';
 import { profileAvatarUrl } from '../../../lib/profile-avatars';
 
 export async function GET(request: Request) {
@@ -14,5 +15,5 @@ export async function GET(request: Request) {
       imageUrl: await profileAvatarUrl(doc.data().avatarKey),
     })));
     return NextResponse.json({ active });
-  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not load custom profile images.' }, { status: 401 }); }
+  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not load custom profile images.' }, { status: adminErrorStatus(error, 401) }); }
 }

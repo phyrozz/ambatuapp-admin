@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { AudioLines, Music2, Plus, RefreshCw, Upload } from 'lucide-react';
+import { Allowed } from '../../components/studio-access-provider';
 import { AdminShell, PageHeader } from '../../components/admin-shell';
 import { EmptyState, Notice, Spinner } from '../../components/admin-ui';
 import { authConfigured, configureAuth } from '../../lib/auth';
@@ -106,13 +107,13 @@ export default function SoundsAdmin() {
     {error && <Notice>{error}</Notice>}
     {notice && <p className="avatar-admin-notice" role="status">{notice}</p>}
     <div className="sound-admin-layout">
-      <form className="sound-admin-form" onSubmit={event => void addSound(event)}>
+      <Allowed module="sounds" action="add"><Allowed module="sounds" action="upload"><form className="sound-admin-form" onSubmit={event => void addSound(event)}>
         <header><span><Plus size={17}/></span><div><h2>Add a sound</h2><p>New clips become available as soon as they are saved.</p></div></header>
         <label>Sound name<input value={name} onChange={event => setName(event.target.value)} maxLength={80} required placeholder="Ambatukam remix"/></label>
         <label>Category<input value={category} onChange={event => setCategory(event.target.value)} maxLength={48} required placeholder="Classics"/></label>
         <label className="sound-admin-file"><Upload size={20}/><span><strong>{file?.name ?? 'Choose an audio file'}</strong><small>MP3, WAV, OGG, M4A, AAC, or WebM · 20 MB maximum</small></span><input ref={fileInput} type="file" accept="audio/mpeg,audio/wav,audio/x-wav,audio/ogg,audio/mp4,audio/webm,audio/aac" onChange={event => setFile(event.target.files?.[0] ?? null)} disabled={busy} required/></label>
         <button className="button primary" disabled={busy}>{busy ? <Spinner label="Uploading sound"/> : <><Plus size={16}/>Add sound</>}</button>
-      </form>
+      </form></Allowed></Allowed>
       <section className="sound-admin-catalog">
         <header><div><h2><AudioLines size={19}/>Available sounds</h2><p>These clips appear in the public soundboard and chat picker.</p></div><span>{sounds.length}</span></header>
         {loading && !sounds.length ? <div className="section-loader"><Spinner label="Loading sounds"/></div> : sounds.length ? <div className="sound-admin-list">{sounds.map(sound => <article key={sound.id}><span className={`sound-admin-icon sound-color-${sound.color}`}><Music2 size={18}/></span><div className="sound-admin-meta"><strong>{sound.name}</strong><small>{sound.category}</small></div><audio controls preload="none" src={sound.audioUrl} aria-label={`Preview ${sound.name}`}/></article>)}</div> : <EmptyState title="No sounds yet" description="Add an audio clip to make it available in AmbatuChat and Soundboard."/>}

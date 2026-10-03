@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { Flag } from 'lucide-react';
+import { Allowed } from '../../components/studio-access-provider';
 import { AdminShell, PageHeader } from '../../components/admin-shell';
 import { authConfigured, configureAuth } from '../../lib/auth';
 import type { ChatReport, ChatRestriction } from '../../lib/chat-reports';
@@ -47,7 +48,7 @@ export default function ChatReportsPage() {
   return <AdminShell>
     <PageHeader eyebrow="AMBAVERSE / SAFETY" title="Chat reports" count={reports.filter(item => item.status === 'open').length} description="Review user reports about conversations and messages."/>
     {error && <p role="alert" className="chat-report-error">{error}</p>}
-    {restrictedUsers.length > 0 && <section className="chat-restrictions"><h2>Restricted from chat</h2><div className="chat-restriction-list">{restrictedUsers.map(item => <div key={item.userId} className="chat-restriction-row"><span><strong>{names[item.userId] || item.userId}</strong>{names[item.userId] && <small>{item.userId}</small>}</span><button type="button" className="button" disabled={Boolean(busy)} onClick={() => void updateRestriction(item.userId, false)}>Unrestrict</button></div>)}</div></section>}
+    {restrictedUsers.length > 0 && <section className="chat-restrictions"><h2>Restricted from chat</h2><div className="chat-restriction-list">{restrictedUsers.map(item => <div key={item.userId} className="chat-restriction-row"><span><strong>{names[item.userId] || item.userId}</strong>{names[item.userId] && <small>{item.userId}</small>}</span><Allowed module="chat-reports" action="edit"><button type="button" className="button" disabled={Boolean(busy)} onClick={() => void updateRestriction(item.userId, false)}>Unrestrict</button></Allowed></div>)}</div></section>}
     <div className="chat-report-list">{reports.length ? reports.map(item => {
       const candidates = candidatesFor(item);
       const targetId = selectedTargets[item.id] ?? (candidates.length === 1 ? candidates[0] : '');
@@ -60,9 +61,9 @@ export default function ChatReportsPage() {
         <div className="chat-report-actions">
           {candidates.length > 1 && <label>Reported user<select value={targetId} onChange={event => setSelectedTargets(items => ({ ...items, [item.id]: event.target.value }))}><option value="">Choose a user</option>{candidates.map(id => <option key={id} value={id}>{item.names[id] ? `${item.names[id]} (${id})` : id}</option>)}</select></label>}
           {candidates.length === 1 && targetId && <small>Reported user: {item.names[targetId] ? `${item.names[targetId]} (${targetId})` : targetId}</small>}
-          {targetId && <button type="button" className="button" disabled={Boolean(busy)} onClick={() => void updateRestriction(targetId, !restrictedIds.has(targetId), item.id)}>{restrictedIds.has(targetId) ? 'Unrestrict from chat' : 'Restrict from chat'}</button>}
+          {targetId && <Allowed module="chat-reports" action="edit"><button type="button" className="button" disabled={Boolean(busy)} onClick={() => void updateRestriction(targetId, !restrictedIds.has(targetId), item.id)}>{restrictedIds.has(targetId) ? 'Unrestrict from chat' : 'Restrict from chat'}</button></Allowed>}
           {!candidates.length && <small>No user identified for this report.</small>}
-          {item.status === 'open' && <button type="button" className="button primary" disabled={Boolean(busy)} onClick={() => void resolve(item.id)}>Mark resolved</button>}
+          {item.status === 'open' && <Allowed module="chat-reports" action="edit"><button type="button" className="button primary" disabled={Boolean(busy)} onClick={() => void resolve(item.id)}>Mark resolved</button></Allowed>}
         </div>
       </article>;
     }) : !loading && !error ? <div className="chat-report-empty">No chat reports yet.</div> : null}</div>

@@ -1,0 +1,14 @@
+export type ModuleId = 'characters' | 'lores' | 'videos' | 'sounds' | 'profile-avatars' | 'chat-reports' | 'users' | 'roles';
+export type RoleType = 'view' | 'add' | 'edit' | 'delete' | 'upload' | 'download';
+export type Permissions = Partial<Record<ModuleId, RoleType[]>>;
+export type StudioRole = { id: string; name: string; description: string; permissions: Permissions; userCount: number; protected: boolean };
+export type PersonalDetails = { firstName: string; lastName: string; displayName: string; country: string; bio: string };
+export type StudioUser = PersonalDetails & { sub: string; username: string; email: string; roleId: string | null; roleName?: string | null; enabled: boolean; registrationPending?: boolean; createdAt?: string | null };
+export declare const ROLE_TYPES: RoleType[];
+export declare const STUDIO_MODULES: { id: ModuleId; href: string; key: string }[];
+export function rootPermissions(): Permissions;
+export function canAccess(permissions: Permissions | undefined, module: string, action: string): boolean;
+export function normalizePermissions(value: unknown): Permissions;
+export function permissionForRequest(pathname: string, method: string): { module: ModuleId; action: RoleType } | null;
+export function validateProfile(body: Record<string, unknown>): PersonalDetails;
+export function validateCredentials(body: Record<string, unknown>): { email: string; password: string };

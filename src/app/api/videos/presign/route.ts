@@ -2,6 +2,7 @@ import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../../lib/api-auth';
+import { adminErrorStatus } from '../../../../lib/studio-api';
 import { videoBucket, videoClient } from '../../../../lib/s3-videos';
 import { VIDEO_UPLOAD_LIMIT } from '../../../../lib/video-transcoding.mjs';
 
@@ -27,6 +28,6 @@ export async function POST(request: Request) {
     ]);
     return NextResponse.json({ sourceKey, videoKey, thumbnailKey, sourceUploadUrl, thumbnailUploadUrl, sourceUploadHeaders: { 'content-type': contentType }, thumbnailUploadHeaders: { 'content-type': 'image/jpeg' } });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not prepare upload.' }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not prepare upload.' }, { status: adminErrorStatus(error, 400) });
   }
 }

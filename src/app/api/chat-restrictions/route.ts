@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../lib/api-auth';
+import { adminErrorStatus } from '../../../lib/studio-api';
 import { setChatRestriction } from '../../../lib/chat-reports';
 
 export async function PATCH(request: Request) {
@@ -10,6 +11,6 @@ export async function PATCH(request: Request) {
     const restriction = await setChatRestriction(body.userId, body.restricted, typeof body.reportId === 'string' ? body.reportId : undefined);
     return NextResponse.json({ restriction }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not update chat restriction.' }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not update chat restriction.' }, { status: adminErrorStatus(error, 403), headers: { 'Cache-Control': 'no-store' } });
   }
 }

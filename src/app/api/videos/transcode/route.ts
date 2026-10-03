@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../../lib/api-auth';
+import { adminErrorStatus } from '../../../../lib/studio-api';
 import { createVideoTranscodeJob, finalizeVideoTranscode, getVideoTranscodeJob, headVideoObject, VIDEO_UPLOAD_LIMIT } from '../../../../lib/video-transcoding.mjs';
 
 export const runtime = 'nodejs';
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
     const job = await createVideoTranscodeJob({ sourceKey: body.sourceKey, videoKey: body.videoKey, owner: 'admin', sourceEtag: source.ETag });
     return NextResponse.json({ jobId: job.jobId });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not start video compression.' }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not start video compression.' }, { status: adminErrorStatus(error, 400) });
   }
 }
 
@@ -40,6 +41,6 @@ export async function GET(request: Request) {
     }
     return NextResponse.json({ status: job.Status, error: job.ErrorMessage });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not check video compression.' }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not check video compression.' }, { status: adminErrorStatus(error, 400) });
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '../../../lib/firebase-admin';
 import { requireAdmin } from '../../../lib/api-auth';
+import { adminErrorStatus } from '../../../lib/studio-api';
 import { avatarImageType, bestEffortDeleteProfileAvatar, newProfileAvatarKey, PROFILE_AVATAR_LIMIT, profileAvatarUrl, uploadProfileAvatar } from '../../../lib/profile-avatars';
 
 export const runtime = 'nodejs';
@@ -16,13 +17,14 @@ export async function GET(request: Request) {
       return { id: doc.id, name: doc.data().name ?? '', imageUrl: await profileAvatarUrl(doc.data().imageKey), userCount: users.data().count };
     }));
     return NextResponse.json({ avatars });
-  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not load avatar presets.' }, { status: 401 }); }
+  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not load avatar presets.' }, { status: adminErrorStatus(error, 401) }); }
 }
 
 export async function POST(request: Request) {
   let imageKey: string | undefined;
   try {
     await requireAdmin(request);
+    await requireAdmin(request, { module: 'profile-avatars', action: 'upload' });
     if (!adminDb) return NextResponse.json({ error: 'Firestore is not configured.' }, { status: 503 });
     const form = await request.formData();
     const name = String(form.get('name') ?? '').normalize('NFKC').trim().slice(0, 48);
@@ -40,6 +42,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ id, name, imageUrl: await profileAvatarUrl(imageKey), userCount: 0 }, { status: 201 });
   } catch (error) {
     if (imageKey) await bestEffortDeleteProfileAvatar(imageKey);
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not add avatar preset.' }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not add avatar preset.' }, { status: adminErrorStatus(error, 400) });
   }
 }
