@@ -17,6 +17,32 @@ export function validId(value: unknown) {
   if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(value)) throw new Error('studio.errors.invalidId');
   return value;
 }
+export async function findStudioRoleId(name: string) {
+  const snapshot = await studioDb().collection('studioRoles').where('name', '==', name).limit(1).get();
+  const role = snapshot.docs[0];
+  if (!role) throw new Error('studio.errors.roleMissing');
+  return role.id;
+}
+export async function completeStudioRegistration(sub: string, roleId: string) {
+  const db = studioDb(), userRef = db.collection('studioUsers').doc(validId(sub));
+  const newRoleId = validId(roleId);
+  await db.runTransaction(async tx => {
+    const user = await tx.get(userRef), profile = user.data();
+    if (!user.exists || profile?.enabled !== true) throw new Error('studio.errors.forbidden');
+    if (profile.registrationPending !== true) return;
+    const oldRoleId = typeof profile.roleId === 'string' ? validId(profile.roleId) : null;
+    const roleIds = [...new Set([oldRoleId, newRoleId].filter((id): id is string => Boolean(id)))];
+    const roles = await Promise.all(roleIds.map(id => tx.get(db.collection('studioRoles').doc(id))));
+    const newRole = roles.find(role => role.id === newRoleId);
+    if (!newRole?.exists || newRole.data()?.name !== 'Creator') throw new Error('studio.errors.roleMissing');
+    if (oldRoleId !== newRoleId) {
+      for (const role of roles) {
+        if (role.exists) tx.update(role.ref, { userCount: FieldValue.increment(role.id === newRoleId ? 1 : -1) });
+      }
+    }
+    tx.update(userRef, { roleId: newRoleId, registrationPending: false, updatedAt: FieldValue.serverTimestamp() });
+  });
+}
 export async function listStudioRecords(collection: 'studioUsers' | 'studioRoles', cursor: string | null) {
   const db = studioDb();
   let query = db.collection(collection).orderBy(FieldPath.documentId()).limit(31);

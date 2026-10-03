@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireStudioIdentity } from '../../../lib/api-auth';
 import { addStudioMembership, isCurrentAdmin } from '../../../lib/cognito-admins';
-import { saveStudioUser, studioDb } from '../../../lib/studio-access';
+import { completeStudioRegistration, findStudioRoleId, saveStudioUser, studioDb } from '../../../lib/studio-access';
 import { studioError } from '../../../lib/studio-api';
 import { validateProfile } from '../../../lib/studio-policy.mjs';
 export const runtime = 'nodejs';
@@ -17,12 +17,13 @@ export async function POST(request: Request) {
       if (!await isCurrentAdmin(identity.username)) throw new Error('studio.errors.forbidden');
       return NextResponse.json({ registered: true });
     }
+    const creatorRoleId = await findStudioRoleId('Creator');
     if (!existing) {
       // No client-supplied role or permissions can enter the registration record.
       await saveStudioUser(identity.sub, { ...profile, sub: identity.sub, username: identity.username, email: identity.email, enabled: true, roleId: null, registrationPending: true }, undefined, true);
     }
     await addStudioMembership(identity.username);
-    await studioDb().collection('studioUsers').doc(identity.sub).update({ registrationPending: false });
+    await completeStudioRegistration(identity.sub, creatorRoleId);
     return NextResponse.json({ registered: true });
   } catch (error) { return studioError(error); }
 }
