@@ -1,4 +1,4 @@
-# Ambatu Admin
+# AmbatuApp Studio
 
 Friend request push alerts use the chat service's push Lambda. Set server-only `CHAT_PUSH_FUNCTION_NAME` to `ambatu-chat-<stage>-push` (for example, `ambatu-chat-prod-push`) and grant the admin runtime `lambda:InvokeFunction` on it. Deploy the matching chat-service stage first. The friend-request count badge remains available without this optional push configuration.
 

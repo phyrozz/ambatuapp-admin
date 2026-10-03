@@ -1,12 +1,13 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { AudioLines, BookOpen, Flag, Image, LogOut, ShieldCheck, Sparkles, UsersRound, Video } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { AudioLines, BookOpen, ChevronDown, Flag, Image, LogOut, ShieldCheck, UsersRound, Video } from 'lucide-react';
 import { fetchAuthSession, signOut } from 'aws-amplify/auth';
 import { authConfigured, configureAuth } from '../lib/auth';
 import { ADMIN_GROUP_NAME } from '../lib/admin-constants';
 import { LoadingScreen } from './admin-ui';
+import { StudioBrand } from './studio-brand';
 
 const links = [
   { href: '/', label: 'Characters', Icon: UsersRound },
@@ -21,6 +22,32 @@ const accessLinks = [{ href: '/admins', label: 'Administrators', Icon: ShieldChe
 export function AdminShell({ children, onSignedOut }: { children: React.ReactNode; onSignedOut?: () => void }) {
   const path = usePathname();
   const router = useRouter();
+  const mobileMenu = useRef<HTMLDetailsElement>(null);
+  const currentSection = [...links, ...accessLinks].find(link => link.href === path) ?? links[0];
+  const CurrentIcon = currentSection.Icon;
+  const closeMobileMenu = () => { if (mobileMenu.current) mobileMenu.current.open = false; };
+  useEffect(() => {
+    function dismiss(event: PointerEvent) {
+      if (event.target instanceof Node && !mobileMenu.current?.contains(event.target)) closeMobileMenu();
+    }
+    function escape(event: KeyboardEvent) {
+      if (event.key === 'Escape' && mobileMenu.current?.open) {
+        closeMobileMenu();
+        mobileMenu.current.querySelector('summary')?.focus();
+      }
+    }
+    // Reset the disclosure across routes and the desktop breakpoint.
+    closeMobileMenu();
+    const desktop = window.matchMedia('(min-width: 761px)');
+    desktop.addEventListener('change', closeMobileMenu);
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('keydown', escape);
+    return () => {
+      desktop.removeEventListener('change', closeMobileMenu);
+      document.removeEventListener('pointerdown', dismiss);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [path]);
   const [sessionReady, setSessionReady] = useState(Boolean(onSignedOut) || !authConfigured());
   const [accessDenied, setAccessDenied] = useState(false);
   useEffect(() => {
@@ -37,8 +64,26 @@ export function AdminShell({ children, onSignedOut }: { children: React.ReactNod
   }, [router]);
   async function logout() { if (authConfigured()) await signOut(); onSignedOut?.(); if (!onSignedOut) router.replace('/'); }
   if (!sessionReady) return <LoadingScreen/>;
-  if (accessDenied) return <main className="admin-access-denied"><section><span><ShieldCheck size={23}/></span><p className="eyebrow">AMBATUAPP / ADMIN</p><h1>Admin access required</h1><p>This account is not a member of the admin team. Sign in with an administrator account or ask an existing admin for access.</p><button className="button primary" onClick={() => void logout()}><LogOut size={16}/>Sign out</button></section></main>;
-  return <main className="admin-shell"><aside className="admin-sidebar"><Link className="admin-logo" href="/"><span><Sparkles size={18}/></span>ambatu<b>admin</b></Link><p className="nav-heading">CONTENT</p><nav>{links.map(({ href, label, Icon }) => <Link key={href} href={href} className={path === href ? 'active' : ''}><Icon size={18}/>{label}</Link>)}</nav><p className="nav-heading admin-access-heading">ACCESS</p><nav>{accessLinks.map(({ href, label, Icon }) => <Link key={href} href={href} className={path === href ? 'active' : ''}><Icon size={18}/>{label}</Link>)}</nav><div className="admin-account"><span className="avatar">A</span><div><strong>Administrator</strong><small>Content team</small></div><button aria-label="Sign out" onClick={() => void logout()}><LogOut size={17}/></button></div></aside><section className="admin-mobile"><Link className="admin-logo" href="/"><span><Sparkles size={16}/></span>ambatu<b>admin</b></Link><nav>{[...links, ...accessLinks].map(({ href, label, Icon }) => <Link key={href} href={href} aria-label={label} className={path === href ? 'active' : ''}><Icon size={18}/><span>{label}</span></Link>)}</nav><button className="icon-button" onClick={() => void logout()} aria-label="Sign out"><LogOut size={17}/></button></section><section className="admin-main">{children}</section></main>;
+  if (accessDenied) return <main className="admin-access-denied"><section><span><ShieldCheck size={23}/></span><p className="eyebrow">AmbatuApp Studio</p><h1>Admin access required</h1><p>This account is not a member of the admin team. Sign in with an administrator account or ask an existing admin for access.</p><button className="button primary" onClick={() => void logout()}><LogOut size={16}/>Sign out</button></section></main>;
+  return <main className="admin-shell"><aside className="admin-sidebar"><Link className="admin-logo" href="/"><StudioBrand/></Link><p className="nav-heading">CONTENT</p><nav>{links.map(({ href, label, Icon }) => <Link key={href} href={href} className={path === href ? 'active' : ''}><Icon size={18}/>{label}</Link>)}</nav><p className="nav-heading admin-access-heading">ACCESS</p><nav>{accessLinks.map(({ href, label, Icon }) => <Link key={href} href={href} className={path === href ? 'active' : ''}><Icon size={18}/>{label}</Link>)}</nav><div className="admin-account"><span className="avatar">A</span><div><strong>Administrator</strong><small>Content team</small></div><button aria-label="Sign out" onClick={() => void logout()}><LogOut size={17}/></button></div></aside><header className="admin-mobile">
+    <div className="admin-mobile-topbar">
+      <Link className="admin-logo" href="/" onClick={closeMobileMenu}><StudioBrand/></Link>
+      <button className="admin-mobile-signout" onClick={() => void logout()} aria-label="Sign out"><LogOut size={18}/></button>
+    </div>
+    <details className="admin-mobile-menu" ref={mobileMenu}>
+      <summary><CurrentIcon size={18} aria-hidden="true"/><span>{currentSection.label}</span><ChevronDown className="admin-mobile-chevron" size={18} aria-hidden="true"/></summary>
+      <div className="admin-mobile-panel">
+        <p className="nav-heading" id="admin-mobile-content-heading">CONTENT</p>
+        <nav aria-labelledby="admin-mobile-content-heading">
+          {links.map(({ href, label, Icon }) => <Link key={href} href={href} onClick={closeMobileMenu} aria-current={path === href ? 'page' : undefined} className={path === href ? 'active' : ''}><Icon size={20} aria-hidden="true"/><span>{label}</span></Link>)}
+        </nav>
+        <p className="nav-heading admin-access-heading" id="admin-mobile-access-heading">ACCESS</p>
+        <nav aria-labelledby="admin-mobile-access-heading">
+          {accessLinks.map(({ href, label, Icon }) => <Link key={href} href={href} onClick={closeMobileMenu} aria-current={path === href ? 'page' : undefined} className={path === href ? 'active' : ''}><Icon size={20} aria-hidden="true"/><span>{label}</span></Link>)}
+        </nav>
+      </div>
+    </details>
+  </header><section className="admin-main">{children}</section></main>;
 }
 
 export function PageHeader({ eyebrow, title, count, description, action }: { eyebrow: string; title: string; count?: number; description?: string; action?: React.ReactNode }) {
