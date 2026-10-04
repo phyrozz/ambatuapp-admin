@@ -3,6 +3,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../../lib/api-auth';
 import { adminErrorStatus } from '../../../../lib/studio-api';
+import { studioContentOwner } from '../../../../lib/studio-content';
 
 export const runtime = 'nodejs';
 const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -14,9 +15,10 @@ export async function POST(request: Request) {
     if (!bucket || !region) return NextResponse.json({ error: 'S3 is not configured.' }, { status: 503 });
     const { fileName, contentType, characterId, scope = 'characters' } = await request.json();
     if (!fileName || !characterId || !['characters', 'lores'].includes(scope) || !allowedTypes.has(contentType)) return NextResponse.json({ error: 'A JPG, PNG, or WEBP image is required.' }, { status: 400 });
-    await requireAdmin(request, { module: scope === 'lores' ? 'lores' : 'characters', action: 'upload' });
+    const actor = await requireAdmin(request, { module: scope === 'lores' ? 'lores' : 'characters', action: 'upload' });
+    if (typeof characterId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(characterId)) return NextResponse.json({ error: 'An image destination is required.' }, { status: 400 });
     const extension = contentType === 'image/jpeg' ? 'jpg' : contentType.split('/')[1];
-    const key = `${scope}/${characterId}/${scope === 'characters' ? 'portrait' : 'image'}-${crypto.randomUUID()}.${extension}`;
+    const key = `${scope}/${studioContentOwner(actor)}/${characterId}/${scope === 'characters' ? 'portrait' : 'image'}-${crypto.randomUUID()}.${extension}`;
     const client = new S3Client({ region });
     const uploadUrl = await getSignedUrl(client, new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }), { expiresIn: 300 });
     return NextResponse.json({ uploadUrl, key });

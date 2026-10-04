@@ -30,17 +30,17 @@ export function soundExtension(contentType: string) {
 }
 
 export function validSoundAssetKey(value: unknown): value is string {
-  return typeof value === 'string' && /^soundboard\/(?:legacy|admin)\/[A-Za-z0-9_-]+\.(?:mp3|wav|ogg|m4a|webm|aac)$/.test(value);
+  return typeof value === 'string' && /^soundboard\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.(?:mp3|wav|ogg|m4a|webm|aac)$/.test(value);
 }
 
-export function adminSoundUploadKey(value: unknown) {
-  if (typeof value !== 'string' || !/^soundboard\/admin\/[a-f0-9-]{36}\.(?:mp3|wav|ogg|m4a|webm|aac)$/.test(value)) {
+export function adminSoundUploadKey(value: unknown, owner = 'admin') {
+  if (typeof value !== 'string' || !value.startsWith(`soundboard/${owner}/`) || !/^soundboard\/[A-Za-z0-9_-]+\/[a-f0-9-]{36}\.(?:mp3|wav|ogg|m4a|webm|aac)$/.test(value)) {
     throw new Error('Upload an audio clip first.');
   }
   return value;
 }
 
-export async function createSoundUpload(fileName: unknown, contentType: unknown, size: unknown) {
+export async function createSoundUpload(fileName: unknown, contentType: unknown, size: unknown, owner = 'admin') {
   const bucket = soundBucket();
   if (!bucket) throw new Error('Sound storage is not configured.');
   if (typeof fileName !== 'string' || !fileName.trim() || fileName.length > 180 || typeof contentType !== 'string') {
@@ -51,7 +51,8 @@ export async function createSoundUpload(fileName: unknown, contentType: unknown,
   if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0 || size > SOUND_AUDIO_LIMIT) {
     throw new Error('Audio clips must be 20 MB or smaller.');
   }
-  const soundKey = `soundboard/admin/${crypto.randomUUID()}.${extension}`;
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(owner)) throw new Error('Could not prepare the audio upload.');
+  const soundKey = `soundboard/${owner}/${crypto.randomUUID()}.${extension}`;
   const content = contentType.toLowerCase().split(';')[0].trim();
   const uploadUrl = await getSignedUrl(
     soundClient(),
