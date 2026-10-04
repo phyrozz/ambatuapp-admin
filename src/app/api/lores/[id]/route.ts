@@ -24,7 +24,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     await ref.set({ ...update, updatedAt: FieldValue.serverTimestamp(), updated: 'Just now' }, { merge: true });
     const data = (await ref.get()).data()!;
-    const { createdBy: _createdBy, ...visible } = data;
+    const { createdBy: _storedCreatedBy, ...visible } = data;
     const keys = Array.isArray(visible.imageKeys) ? visible.imageKeys : [];
     return NextResponse.json({ id, ...visible, imageUrls: await Promise.all(keys.map(signedCharacterImageUrl)) });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Request failed' }, { status: adminErrorStatus(error, 400) }); }

@@ -3,6 +3,8 @@ import { adminDb } from '../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../lib/player-auth';
 import { fallbackPlayerName } from '../../../../lib/player-profiles';
 import { profileAvatarUrl } from '../../../../lib/profile-avatars';
+import { FieldValue } from 'firebase-admin/firestore';
+import { emailSearchKey } from '../../../../lib/creator-search';
 
 const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type, authorization', 'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS', 'Cache-Control': 'no-store' };
 const usernamePattern = /^[\p{L}\p{N}][\p{L}\p{N} _-]{1,23}$/u;
@@ -26,7 +28,7 @@ export async function GET(request: Request) {
     const player = await requirePlayer(request);
     const data = (await adminDb.collection('playerProfiles').doc(player.id).get()).data();
     const moderation = await adminDb.collection('profileAvatarModeration').doc(player.id).get();
-    return json({ username: typeof data?.username === 'string' ? data.username : fallbackPlayerName(player.email), birthDate: typeof data?.birthDate === 'string' ? data.birthDate : null, avatarType: data?.avatarType ?? null, avatarId: data?.avatarId ?? null, avatarUrl: await profileAvatarUrl(typeof data?.avatarKey === 'string' ? data.avatarKey : undefined), avatarRemoved: moderation.data()?.status === 'removed' });
+    return json({ username: typeof data?.username === 'string' ? data.username : fallbackPlayerName(player.email), birthDate: typeof data?.birthDate === 'string' ? data.birthDate : null, bio: typeof data?.bio === 'string' ? data.bio : '', avatarType: data?.avatarType ?? null, avatarId: data?.avatarId ?? null, avatarUrl: await profileAvatarUrl(typeof data?.avatarKey === 'string' ? data.avatarKey : undefined), avatarRemoved: moderation.data()?.status === 'removed' });
   } catch (error) { return json({ error: error instanceof Error ? error.message : 'Could not load profile.' }, 401); }
 }
 
@@ -34,16 +36,17 @@ export async function PUT(request: Request) {
   try {
     if (!adminDb) throw new Error('Player profile service is not configured.');
     const player = await requirePlayer(request);
-    const { username, birthDate } = await request.json();
+    const { username, birthDate, bio } = await request.json();
     const cleanUsername = typeof username === 'string' ? username.normalize('NFKC').trim().replace(/\s+/g, ' ') : '';
     if (!usernamePattern.test(cleanUsername)) throw new Error('Username must be 2–24 letters, numbers, spaces, hyphens, or underscores.');
     if (birthDate !== null && !validBirthDate(birthDate)) throw new Error('Enter a valid birth date that is not in the future.');
+    if (bio !== undefined && (typeof bio !== 'string' || bio.length > 280)) throw new Error('INVALID_BIO');
     const usernameLower = cleanUsername.toLocaleLowerCase();
     const profiles = adminDb.collection('playerProfiles');
     const claims = adminDb.collection('playerUsernameClaims');
     const matches = await profiles.where('usernameLower', '==', usernameLower).limit(2).get();
     if (matches.docs.some((doc) => doc.id !== player.id)) throw new UsernameTakenError('Username is already taken.');
-    const profile = { username: cleanUsername, usernameLower, birthDate: birthDate ?? null, updatedAt: new Date() };
+    const profile = { username: cleanUsername, usernameLower, birthDate: birthDate ?? null, ...(bio === undefined ? {} : { bio: bio.trim() }), emailSearchHash: player.emailVerified ? emailSearchKey(player.email) : FieldValue.delete(), updatedAt: new Date() };
     const profileRef = profiles.doc(player.id);
     const requestedClaimRef = claims.doc(usernameLower);
     await adminDb.runTransaction(async (transaction) => {
@@ -58,7 +61,7 @@ export async function PUT(request: Request) {
       transaction.set(profileRef, profile, { merge: true });
       if (previousClaimRef && previousClaim?.data()?.playerId === player.id) transaction.delete(previousClaimRef);
     });
-    return json(profile);
+    return json({ username: profile.username, birthDate: profile.birthDate, ...(bio === undefined ? {} : { bio: profile.bio }) });
   } catch (error) {
     if (error instanceof UsernameTakenError) return json({ code: 'username_taken', error: error.message }, 409);
     return json({ error: error instanceof Error ? error.message : 'Could not save profile.' }, 400);

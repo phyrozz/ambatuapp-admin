@@ -12,6 +12,7 @@
     "seed:characters": "node --env-file=.env.local scripts/seed-legacy-characters.mjs",
     "compress:videos": "node --env-file=.env.local scripts/compress-videos.mjs",
     "backfill:player-search": "node --env-file=.env.local scripts/backfill-player-search.mjs",
+    "backfill:creator-search": "node --env-file=.env.local scripts/backfill-creator-search.mjs",
     "seed:access": "node --env-file=.env.local scripts/seed-studio-access.mjs",
     "test:access": "node --test src/lib/studio-policy.test.mjs src/lib/studio-access.test.mjs src/lib/studio-auth.test.mjs src/lib/studio-registration.test.mjs",
     "setup:registration": "node --env-file=.env.local scripts/enable-studio-registration.mjs",

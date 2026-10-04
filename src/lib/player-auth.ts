@@ -13,6 +13,7 @@ export async function playerFromRequest(request: Request) {
   return {
     id: claims.sub,
     email: typeof claims.email === 'string' ? claims.email : 'Signed-in player',
+    emailVerified: claims.email_verified === true || claims.email_verified === 'true',
   };
 }
 

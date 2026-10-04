@@ -3,10 +3,12 @@ import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../lib/player-auth';
 import { profileAvatarUrl } from '../../../../../lib/profile-avatars';
+import { FieldValue } from 'firebase-admin/firestore';
+import { emailSearchKey, normalizeCreatorQuery } from '../../../../../lib/creator-search';
 
 async function profileResult(id: string, profile: FirebaseFirestore.DocumentData | undefined, fallback: string) {
   const moderation = await adminDb!.collection('profileAvatarModeration').doc(id).get();
-  return { username: typeof profile?.username === 'string' ? profile.username : fallback, birthDate: typeof profile?.birthDate === 'string' ? profile.birthDate : null, avatarType: profile?.avatarType ?? null, avatarId: profile?.avatarId ?? null, avatarUrl: await profileAvatarUrl(typeof profile?.avatarKey === 'string' ? profile.avatarKey : undefined), avatarRemoved: moderation.data()?.status === 'removed' };
+  return { username: typeof profile?.username === 'string' ? profile.username : fallback, birthDate: typeof profile?.birthDate === 'string' ? profile.birthDate : null, bio: typeof profile?.bio === 'string' ? profile.bio : '', avatarType: profile?.avatarType ?? null, avatarId: profile?.avatarId ?? null, avatarUrl: await profileAvatarUrl(typeof profile?.avatarKey === 'string' ? profile.avatarKey : undefined), avatarRemoved: moderation.data()?.status === 'removed' };
 }
 
 const headers = {
@@ -25,18 +27,17 @@ export async function POST(request: Request) {
     const profiles = adminDb.collection('playerProfiles');
     const claims = adminDb.collection('playerUsernameClaims');
     const profileRef = profiles.doc(player.id);
+    const identity = { emailSearchHash: player.emailVerified ? emailSearchKey(player.email) : FieldValue.delete() };
     const existing = await profileRef.get();
     const existingUsername = existing.data()?.username;
     if (typeof existingUsername === 'string' && existingUsername.trim()) {
-      if (existing.data()?.usernameLower !== existingUsername.toLocaleLowerCase()) {
-        await adminDb.runTransaction(async transaction => {
+      await adminDb.runTransaction(async transaction => {
           const current = await transaction.get(profileRef);
           const username = current.data()?.username;
-          if (typeof username === 'string' && username.trim() && current.data()?.usernameLower !== username.toLocaleLowerCase()) {
-            transaction.update(profileRef, { usernameLower: username.toLocaleLowerCase() });
+          if (typeof username === 'string' && username.trim()) {
+            transaction.update(profileRef, { usernameLower: normalizeCreatorQuery(username), ...identity });
           }
-        });
-      }
+      });
       const latest = await profileRef.get();
       return NextResponse.json(await profileResult(player.id, latest.data(), player.email.split('@')[0] || 'Player'), { headers });
     }
@@ -52,12 +53,13 @@ export async function POST(request: Request) {
         const [current, claim] = await Promise.all([transaction.get(profileRef), transaction.get(claimRef)]);
         const currentUsername = current.data()?.username;
         if (typeof currentUsername === 'string' && currentUsername.trim()) {
+          transaction.update(profileRef, { usernameLower: normalizeCreatorQuery(currentUsername), ...identity });
           return current.data();
         }
         if (claim.exists && claim.data()?.playerId !== player.id) return null;
         transaction.set(claimRef, { playerId: player.id });
         const birthDate = current.data()?.birthDate ?? null;
-        transaction.set(profileRef, { username, usernameLower, birthDate, updatedAt: new Date() }, { merge: true });
+        transaction.set(profileRef, { username, usernameLower, birthDate, ...identity, createdAt: current.data()?.createdAt ?? new Date(), updatedAt: new Date() }, { merge: true });
         return { username, birthDate, avatarType: current.data()?.avatarType ?? null, avatarId: current.data()?.avatarId ?? null, avatarKey: current.data()?.avatarKey ?? null };
       });
       if (result) return NextResponse.json(await profileResult(player.id, result, player.email.split('@')[0] || 'Player'), { headers });

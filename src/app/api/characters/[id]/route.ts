@@ -19,7 +19,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (actor && actor.roleId !== 'root' && typeof update.imageKey === 'string' && update.imageKey !== stored.imageKey && update.imageKey !== stored.image && !update.imageKey.startsWith(`characters/${actor.sub}/`)) throw new Error('studio.errors.forbidden');
     await ref.set({ ...update, updatedAt: FieldValue.serverTimestamp(), updated: 'Just now' }, { merge: true });
     const result = (await ref.get()).data();
-    const { createdBy: _createdBy, ...visible } = result ?? {};
+    const { createdBy: _storedCreatedBy, ...visible } = result ?? {};
     return NextResponse.json({ id, ...visible, imageUrl: await signedCharacterImageUrl(characterImageKey(result?.imageKey, result?.image)), updated: 'Just now' });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Request failed' }, { status: adminErrorStatus(error, 400) }); }
 }
