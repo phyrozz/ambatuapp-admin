@@ -11,7 +11,9 @@ export function OPTIONS() { return new NextResponse(null, { headers }); }
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!adminDb) return NextResponse.json({ error: 'Lore service is not configured.' }, { status: 503, headers });
   const { id } = await params;
-  const snapshot = await adminDb.collection('lores').doc(id).collection('comments').orderBy('createdAt', 'desc').limit(50).get();
+  const lore = await adminDb.collection('lores').doc(id).get();
+  if (!lore.exists || lore.data()?.status !== 'Published') return NextResponse.json({ error: 'Lore not found.' }, { status: 404, headers });
+  const snapshot = await lore.ref.collection('comments').orderBy('createdAt', 'desc').limit(50).get();
   let playerId: string | null = null;
   if (request.headers.get('authorization')) {
     try { playerId = (await playerFromRequest(request))?.id ?? null; } catch {}

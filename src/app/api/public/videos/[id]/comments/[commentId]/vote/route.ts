@@ -1,21 +1,31 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../../../../../lib/firebase-admin';
-import { playerFromRequest } from '../../../../../../../../lib/player-auth';
+import { requirePlayer } from '../../../../../../../../lib/player-auth';
+import { allowPlayerWrite } from '../../../../../../../../lib/public-write-limits';
 
 const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type, authorization', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Cache-Control': 'no-store' };
 export function OPTIONS() { return new NextResponse(null, { headers }); }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string; commentId: string }> }) {
+  let player: Awaited<ReturnType<typeof requirePlayer>>;
+  try {
+    player = await requirePlayer(request);
+  } catch {
+    return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers });
+  }
+
   try {
     if (!adminDb) throw new Error('Video service is not configured.');
     const { id, commentId } = await params;
-    const { anonymousId, value } = await request.json();
-    const player = await playerFromRequest(request);
-    if ((!player && (typeof anonymousId !== 'string' || anonymousId.length < 12 || anonymousId.includes('/'))) || ![1, -1].includes(value)) throw new Error('Invalid vote.');
+    const { value } = await request.json();
+    if (![1, -1].includes(value)) throw new Error('Invalid vote.');
+    if (!await allowPlayerWrite(adminDb, player.id, 'videoVotes', [{ key: 'minute', max: 30, windowMs: 60_000 }])) {
+      return NextResponse.json({ error: 'RATE_LIMITED' }, { status: 429, headers });
+    }
     const video = adminDb.collection('videos').doc(id);
     const comment = video.collection('comments').doc(commentId);
-    const vote = comment.collection('votes').doc(player ? `user:${player.id}` : anonymousId);
+    const vote = comment.collection('votes').doc(`user:${player.id}`);
     const result = await adminDb.runTransaction(async transaction => {
       const [videoSnapshot, commentSnapshot, voteSnapshot] = await Promise.all([transaction.get(video), transaction.get(comment), transaction.get(vote)]);
       if (videoSnapshot.data()?.status !== 'Published') throw new Error('Video not found.');
