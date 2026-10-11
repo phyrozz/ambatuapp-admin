@@ -7,6 +7,7 @@ import {
   contributionError,
   contributionHeaders,
   contributionPlayer,
+  contributionStatus,
   limitContribution,
 } from "../../../../../../lib/community-content";
 import {
@@ -37,11 +38,13 @@ export async function PATCH(
     )
       throw new ContributionError(404);
     const body = await contributionBody(request);
+    const requestedStatus = body.status === undefined ? undefined : contributionStatus(body.status);
     const fields = loreFields(body, player.id);
     await limitContribution(player.id, "lore-edit", 30);
     await Promise.all(fields.imageKeys.map(verifyPlayerLoreImage));
     const ref = adminDb!.collection("lores").doc(id);
     let oldImages: string[] = [];
+    let status: 'Draft' | 'Published' = 'Published';
     await adminDb!.runTransaction(async (transaction) => {
       const existing = await transaction.get(ref);
       const data = existing.data();
@@ -54,8 +57,10 @@ export async function PATCH(
       oldImages = Array.isArray(data.imageKeys)
         ? data.imageKeys.filter((key): key is string => typeof key === "string")
         : [];
+      status = requestedStatus ?? (data.status === 'Draft' ? 'Draft' : 'Published');
       transaction.update(ref, {
         ...fields,
+        status,
         updatedAt: FieldValue.serverTimestamp(),
         updated: "Just now",
       });
@@ -74,7 +79,7 @@ export async function PATCH(
       ),
     );
     return NextResponse.json(
-      { lore: { id, ...fields, imageUrls } },
+      { lore: { id, ...fields, status, imageUrls } },
       { headers: contributionHeaders },
     );
   } catch (error) {

@@ -117,3 +117,65 @@ export async function verifyPlayerLoreImage(key: string) {
   )
     throw new Error("Invalid lore image.");
 }
+
+export async function createPlayerCharacterImageUpload(
+  playerId: string,
+  submissionId: string,
+  contentType: unknown,
+  size: unknown,
+) {
+  const imageType = typeof contentType === "string" ? contentType : "";
+  const imageSize = typeof size === "number" ? size : 0;
+  const extension = loreImageTypes[imageType];
+  if (
+    !extension ||
+    !Number.isSafeInteger(imageSize) ||
+    imageSize < 1 ||
+    imageSize > PLAYER_LORE_IMAGE_LIMIT
+  )
+    throw new Error("Invalid character image.");
+  if (
+    !/^[a-f0-9-]{36}$/i.test(playerId) ||
+    !/^[a-f0-9-]{36}$/i.test(submissionId)
+  )
+    throw new Error("Invalid character image destination.");
+  const { bucket, client } = loreImageStorage();
+  const key = `characters/player_${playerId}/${submissionId}/${crypto.randomUUID()}.${extension}`;
+  const uploadUrl = await getSignedUrl(
+    client,
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ContentType: imageType,
+      ContentLength: imageSize,
+    }),
+    { expiresIn: 300 },
+  );
+  return { key, uploadUrl, uploadHeaders: { "content-type": imageType } };
+}
+
+export function isPlayerCharacterImageKey(value: unknown, playerId: string) {
+  return (
+    typeof value === "string" &&
+    new RegExp(
+      `^characters/player_${playerId}/[a-f0-9-]{36}/[a-f0-9-]{36}\\.(?:jpg|png|webp)$`,
+      "i",
+    ).test(value)
+  );
+}
+
+export async function verifyPlayerCharacterImage(key: string) {
+  const { bucket, client } = loreImageStorage();
+  const head = await client.send(
+    new HeadObjectCommand({ Bucket: bucket, Key: key }),
+  );
+  const extension = key.split(".").at(-1);
+  if (
+    !head.ContentLength ||
+    head.ContentLength > PLAYER_LORE_IMAGE_LIMIT ||
+    !head.ContentType ||
+    loreImageTypes[head.ContentType.split(";")[0].trim().toLowerCase()] !==
+      extension
+  )
+    throw new Error("Invalid character image.");
+}

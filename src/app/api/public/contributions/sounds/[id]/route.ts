@@ -7,6 +7,7 @@ import {
   contributionError,
   contributionHeaders,
   contributionPlayer,
+  contributionStatus,
   limitContribution,
 } from "../../../../../../lib/community-content";
 import { soundFields } from "../../../../../../lib/admin-sounds";
@@ -14,6 +15,7 @@ import {
   adminSoundUploadKey,
   deleteSoundUpload,
   verifySoundUpload,
+  signedSoundUrl,
 } from "../../../../../../lib/s3-sounds";
 
 export const runtime = "nodejs";
@@ -37,6 +39,7 @@ export async function PATCH(
     const { id } = await params;
     if (!validId(id)) throw new ContributionError(404);
     const body = await contributionBody(request);
+    const requestedStatus = body.status === undefined ? undefined : contributionStatus(body.status);
     const fields = soundFields(body);
     await limitContribution(player.id, "sound-edit", 30);
     const ref = adminDb!.collection("soundboardSounds").doc(id);
@@ -60,6 +63,7 @@ export async function PATCH(
         ? oldSoundKey
         : adminSoundUploadKey(body.soundKey, `player_${player.id}`);
     if (soundKey !== oldSoundKey) await verifySoundUpload(soundKey);
+    let status: 'Draft' | 'Published' = 'Published';
     await adminDb!.runTransaction(async (transaction) => {
       const latest = await transaction.get(ref);
       const latestData = latest.data();
@@ -75,8 +79,10 @@ export async function PATCH(
         oldSoundKey
       )
         throw new ContributionError(409);
+      status = requestedStatus ?? (latestData.status === 'Draft' ? 'Draft' : 'Published');
       transaction.update(ref, {
         ...fields,
+        status,
         soundKey,
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -84,7 +90,7 @@ export async function PATCH(
     if (soundKey !== oldSoundKey)
       await deleteSoundUpload(oldSoundKey).catch(() => undefined);
     return NextResponse.json(
-      { sound: { id, ...fields } },
+      { sound: { id, ...fields, status, file: await signedSoundUrl(soundKey) } },
       { headers: contributionHeaders },
     );
   } catch (error) {

@@ -16,6 +16,12 @@ export class ContributionError extends Error {
   }
 }
 
+export function contributionStatus(value: unknown, fallback: 'Draft' | 'Published' = 'Published'): 'Draft' | 'Published' {
+  if (value === undefined) return fallback;
+  if (value !== 'Draft' && value !== 'Published') throw new ContributionError(400);
+  return value;
+}
+
 export async function contributionPlayer(request: Request) {
   if (!adminDb) throw new ContributionError(503);
   try {

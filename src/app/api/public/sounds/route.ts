@@ -1,7 +1,7 @@
 import { FieldPath } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../lib/firebase-admin';
-import { soundAudioUrl, soundResponse } from '../../../../lib/admin-sounds';
+import { isPublicSound, soundAudioUrl, soundResponse } from '../../../../lib/admin-sounds';
 import { validSoundAssetKey } from '../../../../lib/s3-sounds';
 import { playerDisplayProfiles } from '../../../../lib/player-profiles';
 
@@ -41,7 +41,8 @@ export async function GET(request: Request) {
       .limit(limit + 1);
     if (cursor) query = query.startAfter(cursor.name, cursor.id);
     const snapshot = paginated ? await query.get() : await collection.get();
-    const page = paginated ? snapshot.docs.slice(0, limit) : snapshot.docs;
+    const scannedPage = paginated ? snapshot.docs.slice(0, limit) : snapshot.docs;
+    const page = scannedPage.filter(doc => isPublicSound(doc.data()));
     const origin = new URL(request.url).origin;
     const uploaderIds = page
       .filter(doc => doc.data().source === 'revamp' && typeof doc.data().uploaderId === 'string')
@@ -63,7 +64,7 @@ export async function GET(request: Request) {
         };
       });
     if (!paginated) sounds.sort((a, b) => a.name.localeCompare(b.name));
-    const last = page.at(-1);
+    const last = scannedPage.at(-1);
     const nextCursor = paginated && snapshot.docs.length > limit && last && typeof last.data().name === 'string'
       ? Buffer.from(JSON.stringify({ name: last.data().name, id: last.id })).toString('base64url')
       : null;

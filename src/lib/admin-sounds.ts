@@ -1,5 +1,10 @@
 export type SoundFields = { name: string; category: string };
 
+// Existing catalog entries predate status and remain public.
+export function isPublicSound(data: Record<string, unknown>) {
+  return data.status === undefined || data.status === 'Published';
+}
+
 export function soundFields(body: Record<string, unknown>): SoundFields {
   const name = typeof body.name === 'string' ? body.name.normalize('NFKC').trim() : '';
   const category = typeof body.category === 'string' ? body.category.normalize('NFKC').trim() : '';

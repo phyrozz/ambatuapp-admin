@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../../lib/firebase-admin';
-import { soundAudioUrl, soundResponse } from '../../../../../lib/admin-sounds';
+import { isPublicSound, soundAudioUrl, soundResponse } from '../../../../../lib/admin-sounds';
 import { validSoundAssetKey } from '../../../../../lib/s3-sounds';
 
 export const runtime = 'nodejs';
@@ -22,7 +22,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) return NextResponse.json({ error: 'Sound not found.' }, { status: 404, headers });
     const snapshot = await adminDb.collection('soundboardSounds').doc(id).get();
     const data = snapshot.data();
-    if (!snapshot.exists || !data || !validSoundAssetKey(data.soundKey) || typeof data.name !== 'string' || typeof data.category !== 'string') {
+    if (!snapshot.exists || !data || !isPublicSound(data) || !validSoundAssetKey(data.soundKey) || typeof data.name !== 'string' || typeof data.category !== 'string') {
       return NextResponse.json({ error: 'Sound not found.' }, { status: 404, headers });
     }
     const sound = soundResponse(id, data, soundAudioUrl(new URL(request.url).origin, id));

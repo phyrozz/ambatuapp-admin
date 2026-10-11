@@ -8,6 +8,7 @@ import {
   contributionError,
   contributionHeaders,
   contributionPlayer,
+  contributionStatus,
   limitContribution,
 } from "../../../../../lib/community-content";
 import {
@@ -81,6 +82,7 @@ export async function GET(request: Request) {
         );
         return {
           id: doc.id,
+          status: data.status === 'Draft' ? 'Draft' : 'Published',
           title: typeof data.title === "string" ? data.title : "",
           text: typeof data.text === "string" ? data.text : "",
           tags: Array.isArray(data.tags)
@@ -116,6 +118,7 @@ export async function POST(request: Request) {
   try {
     const player = await contributionPlayer(request);
     const body = await contributionBody(request);
+    const status = contributionStatus(body.status);
     const title = typeof body.title === "string" ? body.title.trim() : "";
     const text = typeof body.text === "string" ? body.text.trim() : "";
     if (
@@ -173,7 +176,7 @@ export async function POST(request: Request) {
         tags,
         translations,
         imageKeys,
-        status: "Published",
+        status,
         upvotes: 0,
         downvotes: 0,
         commentCount: 0,

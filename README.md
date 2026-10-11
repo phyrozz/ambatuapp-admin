@@ -65,3 +65,15 @@ The deployed Firestore rules deny all Firebase client SDK reads and writes, cove
 Run `npm run test:access`, `npm run typecheck`, `npm run lint`, and `npm run build` to validate the change. Admin text is stored locally in `src/lib/studio-messages.json`; the revamp translation workbook is not used for studio text.
 
 For browser checks, install the revamp project's Playwright dependencies and use Microsoft Edge on Windows. Start `npm run dev:studio-test` in one terminal and run `npm run test:studio-ui` in another. The test server uses dummy Cognito settings and disables Firestore credentials. The browser intercepts Cognito and studio API requests with fixtures, checking role creation, cursor appends, user creation, restricted and pending-role access, registration, email confirmation, profile completion, password matching, and mobile layout without changing live accounts or content.
+
+## Revamp character contributions
+
+Lore and sound contributions also accept `status: "Draft" | "Published"` on their existing POST and PATCH routes. Creation defaults to Published for older clients; editing without a status preserves the existing status. MyDreamy lists both statuses for the verified owner. Public sound catalog, detail, audio, and play-count routes exclude drafts, while legacy sounds without a status remain public. Owner sound lists return signed draft audio previews. No additional Firestore indexes are needed for this status support.
+
+Signed-in revamp users create characters with the same portrait, name, role/title, biography, tags, and Draft/Published fields as Studio. MyDreamy lists their own drafts and published characters with cursor pagination and lets them edit or publish drafts. Public archive routes continue to return only Published characters.
+
+The player-authenticated endpoints are `/api/public/contributions/characters` (GET/POST), `/api/public/contributions/characters/[id]` (PATCH), and `/api/public/contributions/characters/images/presign` (POST). Ownership comes from the verified player token, not request fields. Portraits use `characters/player_<playerId>/` in the existing character image bucket, accept JPG/PNG/WEBP up to 3 MB, and are checked in storage before saving.
+
+Deploy the new `characters` composite index in `firestore.indexes.json` before enabling the MyDreamy list (`firebase deploy --only firestore:indexes` from this directory with the intended Firebase project selected). Keep the existing character bucket permissions and include the revamp origin in its PUT CORS allowlist. Deploy both the admin API and revamp UI together. No cloud resources are changed by the local implementation.
+
+Run `node --test src/lib/player-character.test.mjs` for validation, ownership, idempotency, and cursor coverage. `node ../outputs/character-contributions/review.mjs` exercises the local revamp server on port 3001 with mocked APIs; it does not publish real characters or upload to S3.

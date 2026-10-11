@@ -1,6 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../../../lib/firebase-admin';
+import { isPublicSound } from '../../../../../../lib/admin-sounds';
 import { requirePlayer } from '../../../../../../lib/player-auth';
 import { allowPlayerWrite } from '../../../../../../lib/public-write-limits';
 import { validSoundAssetKey } from '../../../../../../lib/s3-sounds';
@@ -33,7 +34,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const sound = adminDb.collection('soundboardSounds').doc(id);
     const snapshot = await sound.get();
     const data = snapshot.data();
-    if (!snapshot.exists || !data || !validSoundAssetKey(data.soundKey) || typeof data.name !== 'string' || typeof data.category !== 'string') {
+    if (!snapshot.exists || !data || !isPublicSound(data) || !validSoundAssetKey(data.soundKey) || typeof data.name !== 'string' || typeof data.category !== 'string') {
       return NextResponse.json({ error: 'Sound not found.' }, { status: 404, headers });
     }
 

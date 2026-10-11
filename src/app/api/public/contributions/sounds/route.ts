@@ -7,12 +7,14 @@ import {
   contributionError,
   contributionHeaders,
   contributionPlayer,
+  contributionStatus,
   limitContribution,
 } from "../../../../../lib/community-content";
 import { soundAudioUrl, soundFields } from "../../../../../lib/admin-sounds";
 import {
   adminSoundUploadKey,
   verifySoundUpload,
+  signedSoundUrl,
 } from "../../../../../lib/s3-sounds";
 
 export const runtime = "nodejs";
@@ -61,28 +63,29 @@ export async function GET(request: Request) {
     const snapshot = await query.get();
     const page = snapshot.docs.slice(0, limit);
     const owner = `player_${player.id}`;
-    const sounds = page.flatMap((doc) => {
+    const sounds = (await Promise.all(page.map(async (doc) => {
       const data = doc.data();
       try {
         adminSoundUploadKey(data.soundKey, owner);
         if (typeof data.name !== "string" || typeof data.category !== "string")
-          return [];
-        return [
+          return null;
+        return (
           {
             id: doc.id,
+            status: data.status === 'Draft' ? 'Draft' : 'Published',
             name: data.name,
             category: data.category,
-            file: soundAudioUrl(new URL(request.url).origin, doc.id),
+            file: data.status === 'Draft' ? await signedSoundUrl(data.soundKey) : soundAudioUrl(new URL(request.url).origin, doc.id),
             createdAt:
               (data.createdAt as { toDate?: () => Date } | undefined)
                 ?.toDate?.()
                 .toISOString() ?? null,
-          },
-        ];
+          }
+        );
       } catch {
-        return [];
+        return null;
       }
-    });
+    }))).filter((sound) => sound !== null);
     const last = page.at(-1);
     const nextCursor =
       snapshot.docs.length > limit && last
@@ -101,6 +104,7 @@ export async function POST(request: Request) {
   try {
     const player = await contributionPlayer(request);
     const body = await contributionBody(request);
+    const status = contributionStatus(body.status);
     const fields = soundFields(body);
     const soundKey = adminSoundUploadKey(body.soundKey, `player_${player.id}`);
     await limitContribution(player.id, "sound-publish", 10);
@@ -119,6 +123,7 @@ export async function POST(request: Request) {
       }
       transaction.create(ref, {
         ...fields,
+        status,
         soundKey,
         color: 0,
         playCount: 0,
