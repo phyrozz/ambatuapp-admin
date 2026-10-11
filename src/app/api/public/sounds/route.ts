@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { soundAudioUrl, soundResponse } from '../../../../lib/admin-sounds';
 import { validSoundAssetKey } from '../../../../lib/s3-sounds';
+import { playerDisplayProfiles } from '../../../../lib/player-profiles';
 
 export const runtime = 'nodejs';
 const headers = {
@@ -42,11 +43,24 @@ export async function GET(request: Request) {
     const snapshot = paginated ? await query.get() : await collection.get();
     const page = paginated ? snapshot.docs.slice(0, limit) : snapshot.docs;
     const origin = new URL(request.url).origin;
+    const uploaderIds = page
+      .filter(doc => doc.data().source === 'revamp' && typeof doc.data().uploaderId === 'string')
+      .map(doc => doc.data().uploaderId as string);
+    const uploaderProfiles = await playerDisplayProfiles(uploaderIds, new Map());
     const sounds = page
       .filter(doc => validSoundAssetKey(doc.data().soundKey) && typeof doc.data().name === 'string' && typeof doc.data().category === 'string')
       .map(doc => {
         const sound = soundResponse(doc.id, doc.data(), soundAudioUrl(origin, doc.id));
-        return { id: sound.id, name: sound.name, category: sound.category, color: sound.color, file: sound.audioUrl, createdAt: sound.createdAt, playCount: sound.playCount };
+        const data = doc.data();
+        const uploader = data.source === 'revamp' && typeof data.uploaderId === 'string'
+          ? uploaderProfiles.get(data.uploaderId)
+          : undefined;
+        return {
+          id: sound.id, name: sound.name, category: sound.category, color: sound.color,
+          file: sound.audioUrl, createdAt: sound.createdAt, playCount: sound.playCount,
+          uploaderId: uploader ? data.uploaderId as string : null,
+          uploaderName: uploader?.username ?? null,
+        };
       });
     if (!paginated) sounds.sort((a, b) => a.name.localeCompare(b.name));
     const last = page.at(-1);

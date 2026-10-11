@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { signedCharacterImageUrl } from '../../../../lib/s3-images';
+import { playerDisplayProfiles } from '../../../../lib/player-profiles';
 
 export const runtime = 'nodejs';
 const headers = { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=30' };
 type Translation = { locale?: string; label?: string; title?: string; text?: string };
-type LoreDocument = { id: string; title?: string; text?: string; translations?: Translation[]; tags?: string[]; imageKeys?: string[]; upvotes?: number; downvotes?: number; commentCount?: number; createdAt?: { toMillis?: () => number } | null };
+type LoreDocument = { id: string; title?: string; text?: string; translations?: Translation[]; tags?: string[]; imageKeys?: string[]; upvotes?: number; downvotes?: number; commentCount?: number; uploaderId?: string; source?: string; createdAt?: { toMillis?: () => number } | null };
 
 export async function GET(request: Request) {
   if (!adminDb) return NextResponse.json({ error: 'Lore service is not configured.' }, { status: 503, headers });
@@ -51,9 +52,14 @@ export async function GET(request: Request) {
     ? [...filtered].sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0) || a.id.localeCompare(b.id))
     : [...filtered].sort((a, b) => (b.upvotes ?? 0) - (a.upvotes ?? 0) || (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0) || a.id.localeCompare(b.id));
   const page = paginated ? ordered.slice(offset, offset + limit) : ordered;
+  const uploaderIds = page
+    .filter(item => item.source === 'revamp' && typeof item.uploaderId === 'string')
+    .map(item => item.uploaderId!);
+  const uploaderProfiles = await playerDisplayProfiles(uploaderIds, new Map());
   const lores = await Promise.all(page.map(async item => {
     const keys = Array.isArray(item.imageKeys) ? item.imageKeys.filter((key): key is string => typeof key === 'string') : [];
-    return { id: item.id, title: item.title, text: item.text, translations: item.translations ?? [], tags: item.tags ?? [], imageUrls: await Promise.all(keys.map(signedCharacterImageUrl)), upvotes: item.upvotes ?? 0, downvotes: item.downvotes ?? 0, commentCount: item.commentCount ?? 0 };
+    const uploader = item.source === 'revamp' && item.uploaderId ? uploaderProfiles.get(item.uploaderId) : undefined;
+    return { id: item.id, title: item.title, text: item.text, translations: item.translations ?? [], tags: item.tags ?? [], imageUrls: await Promise.all(keys.map(signedCharacterImageUrl)), upvotes: item.upvotes ?? 0, downvotes: item.downvotes ?? 0, commentCount: item.commentCount ?? 0, uploaderId: uploader ? item.uploaderId : null, uploaderName: uploader?.username ?? null };
   }));
   const nextOffset = offset + page.length;
   const nextCursor = paginated && nextOffset < ordered.length

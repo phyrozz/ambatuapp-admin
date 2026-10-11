@@ -1,6 +1,26 @@
 {
   "indexes": [
     {
+      "collectionGroup": "lores",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "uploaderId", "order": "ASCENDING" },
+        { "fieldPath": "source", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "soundboardSounds",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "uploaderId", "order": "ASCENDING" },
+        { "fieldPath": "source", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "videos",
       "queryScope": "COLLECTION",
       "fields": [
