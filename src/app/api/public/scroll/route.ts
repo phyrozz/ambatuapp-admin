@@ -36,7 +36,7 @@ export async function GET(request: Request) {
       const uploaderId = typeof data.uploaderId === 'string' && data.uploaderId !== 'admin' ? data.uploaderId : null;
       const profile = uploaderId ? profiles.get(uploaderId) : undefined;
       const vote = (await doc.ref.collection('votes').doc(`user:${player.id}`).get()).data()?.value;
-      return { id: doc.id, title: data.title, description: data.description ?? '', uploader: profile?.username ?? data.uploaderName ?? fallbackPlayerName(data.uploaderEmail ?? ''), uploaderId, uploaderAvatarUrl: profile?.avatarUrl ?? null, videoUrl: await signedVideoUrl(data.videoKey), thumbnailUrl: await signedVideoUrl(data.thumbnailKey), upvotes: data.upvotes ?? 0, downvotes: data.downvotes ?? 0, commentCount: data.commentCount ?? 0, userVote: vote === 1 || vote === -1 ? vote : 0 };
+      return { id: doc.id, title: data.title, description: data.description ?? '', uploader: profile?.username ?? data.uploaderName ?? fallbackPlayerName(data.uploaderEmail ?? ''), uploaderId, uploaderAvatarUrl: profile?.avatarUrl ?? null, videoUrl: await signedVideoUrl(data.videoKey), downloadUrl: await signedVideoUrl(data.videoKey, `${doc.id}.mp4`), thumbnailUrl: await signedVideoUrl(data.thumbnailKey), upvotes: data.upvotes ?? 0, downvotes: data.downvotes ?? 0, commentCount: data.commentCount ?? 0, userVote: vote === 1 || vote === -1 ? vote : 0 };
     }));
     const last = page.at(-1);
     const time = last?.data().createdAt;

@@ -6,8 +6,13 @@ export const videoRegion = () => process.env.NEXT_PUBLIC_AWS_REGION || process.e
 
 export function videoClient() { return new S3Client({ region: videoRegion() }); }
 
-export async function signedVideoUrl(key: string) {
+export async function signedVideoUrl(key: string, downloadName?: string) {
   const bucket = videoBucket();
   if (!bucket || !key) return '';
-  return getSignedUrl(videoClient(), new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: 3600 });
+  const safeDownloadName = downloadName?.replace(/[^a-zA-Z0-9._-]/g, '_');
+  return getSignedUrl(videoClient(), new GetObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ...(safeDownloadName ? { ResponseContentDisposition: `attachment; filename="${safeDownloadName}"` } : {}),
+  }), { expiresIn: 3600 });
 }

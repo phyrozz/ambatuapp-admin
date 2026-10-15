@@ -39,6 +39,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       uploaderId,
       uploaderAvatarUrl: profile?.avatarUrl ?? null,
       videoUrl: await signedVideoUrl(data.videoKey),
+      downloadUrl: await signedVideoUrl(data.videoKey, `${snapshot.id}.mp4`),
       thumbnailUrl: typeof data.thumbnailKey === 'string' ? await signedVideoUrl(data.thumbnailKey) : '',
       upvotes: data.upvotes ?? 0,
       downvotes: data.downvotes ?? 0,
