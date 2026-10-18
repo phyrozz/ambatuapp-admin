@@ -70,6 +70,7 @@ export async function GET(request: Request) {
           bio: data.bio ?? "",
           tags: data.tags ?? [],
           status: data.status,
+          viewCount: typeof data.viewCount === 'number' && Number.isSafeInteger(data.viewCount) && data.viewCount > 0 ? data.viewCount : 0,
           imageKey: data.imageKey ?? null,
           imageUrl: (await signedCharacterImageUrl(data.imageKey)) ?? null,
           createdAt:

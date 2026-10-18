@@ -74,6 +74,8 @@ Signed-in revamp users create characters with the same portrait, name, role/titl
 
 The player-authenticated endpoints are `/api/public/contributions/characters` (GET/POST), `/api/public/contributions/characters/[id]` (PATCH), and `/api/public/contributions/characters/images/presign` (POST). Ownership comes from the verified player token, not request fields. Portraits use `characters/player_<playerId>/` in the existing character image bucket, accept JPG/PNG/WEBP up to 3 MB, and are checked in storage before saving.
 
+MyDreamy Creator insights are served by `/api/public/contributions/insights` (authenticated GET). Published player lore and character pages record one view per signed-in account or browser through `/api/public/contributions/views` (POST). Soundboard uploads count unique listeners and total plays separately. Only a hashed viewer key is stored under the content record; guest plays use a browser viewer ID. No Firestore indexes or cloud resources are added.
+
 Deploy the new `characters` composite index in `firestore.indexes.json` before enabling the MyDreamy list (`firebase deploy --only firestore:indexes` from this directory with the intended Firebase project selected). Keep the existing character bucket permissions and include the revamp origin in its PUT CORS allowlist. Deploy both the admin API and revamp UI together. No cloud resources are changed by the local implementation.
 
 Run `node --test src/lib/player-character.test.mjs` for validation, ownership, idempotency, and cursor coverage. `node ../outputs/character-contributions/review.mjs` exercises the local revamp server on port 3001 with mocked APIs; it does not publish real characters or upload to S3.

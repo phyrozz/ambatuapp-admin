@@ -75,6 +75,8 @@ export async function GET(request: Request) {
             status: data.status === 'Draft' ? 'Draft' : 'Published',
             name: data.name,
             category: data.category,
+            playCount: typeof data.playCount === 'number' && Number.isSafeInteger(data.playCount) && data.playCount > 0 ? data.playCount : 0,
+            listenerCount: typeof data.listenerCount === 'number' && Number.isSafeInteger(data.listenerCount) && data.listenerCount > 0 ? data.listenerCount : 0,
             file: data.status === 'Draft' ? await signedSoundUrl(data.soundKey) : soundAudioUrl(new URL(request.url).origin, doc.id),
             createdAt:
               (data.createdAt as { toDate?: () => Date } | undefined)

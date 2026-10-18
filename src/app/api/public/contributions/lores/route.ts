@@ -85,6 +85,10 @@ export async function GET(request: Request) {
           status: data.status === 'Draft' ? 'Draft' : 'Published',
           title: typeof data.title === "string" ? data.title : "",
           text: typeof data.text === "string" ? data.text : "",
+          viewCount: typeof data.viewCount === 'number' && Number.isSafeInteger(data.viewCount) && data.viewCount > 0 ? data.viewCount : 0,
+          upvotes: typeof data.upvotes === 'number' && Number.isSafeInteger(data.upvotes) && data.upvotes > 0 ? data.upvotes : 0,
+          downvotes: typeof data.downvotes === 'number' && Number.isSafeInteger(data.downvotes) && data.downvotes > 0 ? data.downvotes : 0,
+          commentCount: typeof data.commentCount === 'number' && Number.isSafeInteger(data.commentCount) && data.commentCount > 0 ? data.commentCount : 0,
           tags: Array.isArray(data.tags)
             ? data.tags.filter((tag): tag is string => typeof tag === "string")
             : [],
