@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
-import { AudioLines, BookOpen, ChevronDown, Flag, Image, LogOut, ShieldCheck, UsersRound, Video } from 'lucide-react';
+import { AudioLines, BookOpen, ChevronDown, Flag, Image, LayoutDashboard, LogOut, Settings, ShieldCheck, UsersRound, Video } from 'lucide-react';
 import { signOut } from 'aws-amplify/auth';
 import { authConfigured } from '../lib/auth';
 import { STUDIO_MODULES } from '../lib/studio-policy.mjs';
@@ -10,7 +10,7 @@ import { StudioAccessProvider, useStudioAccess } from './studio-access-provider'
 import { useI18n } from './studio-i18n';
 import { LoadingScreen } from './admin-ui';
 import { StudioBrand } from './studio-brand';
-const icons = [UsersRound, BookOpen, Video, AudioLines, Image, Flag, UsersRound, ShieldCheck];
+const icons = [LayoutDashboard, UsersRound, BookOpen, Video, AudioLines, Image, Flag, Settings, UsersRound, ShieldCheck];
 export function AdminShell({ children, onSignedOut }: { children: React.ReactNode; onSignedOut?: () => void }) {
   return <StudioAccessProvider><Shell onSignedOut={onSignedOut}>{children}</Shell></StudioAccessProvider>;
 }

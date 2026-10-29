@@ -1,6 +1,6 @@
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from './firebase-admin';
-import { normalizePermissions, type StudioRole, type StudioUser } from './studio-policy.mjs';
+import { normalizePermissions, rootPermissions, type StudioRole, type StudioUser } from './studio-policy.mjs';
 
 export function studioDb() {
   if (!adminDb) throw new Error('studio.errors.firestore');
@@ -11,7 +11,7 @@ export async function getStudioAccess(sub: string) {
   const profile = (await db.collection('studioUsers').doc(sub).get()).data();
   if (!profile || profile.enabled !== true || profile.registrationPending === true) throw new Error('studio.errors.forbidden');
   const role = typeof profile.roleId === 'string' ? (await db.collection('studioRoles').doc(profile.roleId).get()).data() : null;
-  return { profile: { ...profile, sub } as StudioUser, roleId: profile.roleId ?? null, roleName: role?.name ?? null, permissions: role ? normalizePermissions(role.permissions) : {} };
+  return { profile: { ...profile, sub } as StudioUser, roleId: profile.roleId ?? null, roleName: role?.name ?? null, permissions: role ? (profile.roleId === 'root' ? rootPermissions() : normalizePermissions(role.permissions)) : {} };
 }
 export function validId(value: unknown) {
   if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(value)) throw new Error('studio.errors.invalidId');

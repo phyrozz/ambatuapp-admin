@@ -1,5 +1,11 @@
 # AmbatuApp Studio
 
+## Dashboard
+
+The Dashboard module shows the number of player profile documents, profiles created in the last seven days, and distinct signed-in players active in rolling 24-hour, 7-day, and 30-day windows. A player is counted as active when the updated app is open and visible. Activity is refreshed at most once every 15 minutes per player, and activity before this feature is deployed is unavailable. Profile totals are not Cognito user-pool totals; accounts that have not initialized a player profile are excluded. The new-profile count depends on profile `createdAt` values.
+
+Deploy both the admin API and revamp client to start recording activity. Activity reporting requires the existing Firebase Admin and player Cognito settings, and adds Firestore reads and occasional writes for signed-in visible sessions. Dashboard aggregates use Firestore count queries. Grant Dashboard view in Roles to users who need it; Root has access automatically. Each environment reports the Firebase project configured for its admin API.
+
 Friend request push alerts use the chat service's push Lambda. Set server-only `CHAT_PUSH_FUNCTION_NAME` to `ambatu-chat-<stage>-push` (for example, `ambatu-chat-prod-push`) and grant the admin runtime `lambda:InvokeFunction` on it. Deploy the matching chat-service stage first. The friend-request count badge remains available without this optional push configuration.
 
 ## Chat reports and username search

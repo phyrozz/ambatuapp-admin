@@ -3,7 +3,7 @@ import test from 'node:test';
 import { ROLE_TYPES, STUDIO_MODULES, canAccess, normalizePermissions, permissionForRequest, rootPermissions, validateCredentials, validateProfile } from './studio-policy.mjs';
 test('Root covers every module and all six actions, and denies unknown permissions', () => {
   const permissions = rootPermissions();
-  assert.equal(STUDIO_MODULES.length, 8);
+  assert.equal(STUDIO_MODULES.length, 10);
   assert.deepEqual(ROLE_TYPES, ['view', 'add', 'edit', 'delete', 'upload', 'download']);
   for (const studioModule of STUDIO_MODULES) for (const action of ROLE_TYPES) assert.equal(canAccess(permissions, studioModule.id, action), true);
   assert.equal(canAccess(permissions, 'future-unknown', 'view'), false);

@@ -8,7 +8,7 @@ export function studioError(error: unknown) {
   const message = error instanceof Error ? error.message : '';
   const key = message.startsWith('studio.errors.') ? message : 'studio.errors.request';
   const status = key === 'studio.errors.unauthorized' ? 401 : key === 'studio.errors.forbidden' ? 403
-    : ['studio.errors.firestore', 'studio.errors.authConfiguration'].includes(key) ? 503
-      : ['studio.errors.roleInUse', 'studio.errors.userExists'].includes(key) ? 409 : 400;
+    : ['studio.errors.firestore', 'studio.errors.authConfiguration', 'studio.errors.chatSettingsUnavailable'].includes(key) ? 503
+      : ['studio.errors.roleInUse', 'studio.errors.userExists', 'studio.errors.chatSettingsConflict'].includes(key) ? 409 : 400;
   return NextResponse.json({ error: key }, { status, headers: { 'Cache-Control': 'no-store' } });
 }

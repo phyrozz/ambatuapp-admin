@@ -1,4 +1,4 @@
-export type ModuleId = 'characters' | 'lores' | 'videos' | 'sounds' | 'profile-avatars' | 'chat-reports' | 'users' | 'roles';
+export type ModuleId = 'dashboard' | 'characters' | 'lores' | 'videos' | 'sounds' | 'profile-avatars' | 'chat-reports' | 'settings' | 'users' | 'roles';
 export type RoleType = 'view' | 'add' | 'edit' | 'delete' | 'upload' | 'download';
 export type Permissions = Partial<Record<ModuleId, RoleType[]>>;
 export type StudioRole = { id: string; name: string; description: string; permissions: Permissions; userCount: number; protected: boolean };

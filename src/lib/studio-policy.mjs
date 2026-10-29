@@ -1,11 +1,13 @@
 export const ROLE_TYPES = ['view', 'add', 'edit', 'delete', 'upload', 'download'];
 export const STUDIO_MODULES = [
+  { id: 'dashboard', href: '/dashboard', key: 'studio.modules.dashboard' },
   { id: 'characters', href: '/', key: 'studio.modules.characters' },
   { id: 'lores', href: '/lores', key: 'studio.modules.lores' },
   { id: 'videos', href: '/videos', key: 'studio.modules.videos' },
   { id: 'sounds', href: '/sounds', key: 'studio.modules.sounds' },
   { id: 'profile-avatars', href: '/profile-avatars', key: 'studio.modules.profileAvatars' },
   { id: 'chat-reports', href: '/chat-reports', key: 'studio.modules.chatReports' },
+  { id: 'settings', href: '/settings', key: 'studio.modules.settings' },
   { id: 'users', href: '/users', key: 'studio.modules.users' },
   { id: 'roles', href: '/roles', key: 'studio.modules.roles' },
 ];
