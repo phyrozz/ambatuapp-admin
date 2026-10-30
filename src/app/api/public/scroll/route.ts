@@ -1,5 +1,7 @@
 import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
+import { isDevVideoWriter } from '../../../../lib/dev-content-db';
+import { listScrollVideos } from '../../../../lib/dev-videos';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../lib/player-auth';
 import { fallbackPlayerName, playerDisplayProfiles } from '../../../../lib/player-profiles';
@@ -12,6 +14,10 @@ export async function GET(request: Request) {
   try { player = await requirePlayer(request); } catch { return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers }); }
   if (!adminDb) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
   const raw = new URL(request.url).searchParams.get('cursor');
+  if (isDevVideoWriter()) {
+    try { return NextResponse.json(await listScrollVideos(player.id, raw), { headers }); }
+    catch (error) { return NextResponse.json({ error: error instanceof Error && error.message === 'INVALID_CURSOR' ? 'INVALID_CURSOR' : 'SCROLL_UNAVAILABLE' }, { status: error instanceof Error && error.message === 'INVALID_CURSOR' ? 400 : 500, headers }); }
+  }
   let cursor: { seconds: number; nanoseconds: number; id: string } | null = null;
   if (raw) {
     try {

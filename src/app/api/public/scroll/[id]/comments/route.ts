@@ -1,5 +1,8 @@
 import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
+import { isDevVideoWriter } from '../../../../../../lib/dev-content-db';
+import { listVideoComments } from '../../../../../../lib/dev-video-interactions';
+import { parseLoreCommentCursor } from '../../../../../../lib/lore-comment-cursor';
 import { adminDb } from '../../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../../lib/player-auth';
 import { POST as postVideoComment } from '../../../videos/[id]/comments/route';
@@ -17,6 +20,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!adminDb) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
   const { id } = await params;
   const raw = new URL(request.url).searchParams.get('cursor');
+  if (isDevVideoWriter()) {
+    try { parseLoreCommentCursor(raw, `video:${id}`); }
+    catch { return NextResponse.json({ error: 'INVALID_CURSOR' }, { status: 400, headers }); }
+    try {
+      const result = await listVideoComments(id, player.id, new URL(request.url));
+      return result ? NextResponse.json(result, { headers }) : NextResponse.json({ error: 'NOT_FOUND' }, { status: 404, headers });
+    } catch { return NextResponse.json({ error: 'COMMENTS_UNAVAILABLE' }, { status: 500, headers }); }
+  }
   let cursor: { seconds: number; nanoseconds: number; id: string } | null = null;
   if (raw) {
     try {

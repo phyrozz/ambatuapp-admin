@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevVideoWriter } from '../../../../../lib/dev-content-db';
+import { getScrollVideo } from '../../../../../lib/dev-videos';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../lib/player-auth';
 import { fallbackPlayerName, playerDisplayProfiles } from '../../../../../lib/player-profiles';
@@ -18,6 +20,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!/^[\w-]{1,128}$/.test(id)) return NextResponse.json({ error: 'VIDEO_NOT_FOUND' }, { status: 404, headers });
 
   try {
+    if (isDevVideoWriter()) {
+      const video = await getScrollVideo(player.id, id);
+      return video ? NextResponse.json(video, { headers }) : NextResponse.json({ error: 'VIDEO_NOT_FOUND' }, { status: 404, headers });
+    }
     const snapshot = await adminDb.collection('videos').doc(id).get();
     const data = snapshot.data();
     if (!data || data.status !== 'Published' || typeof data.videoKey !== 'string') {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { Eye, Pencil, Plus, RefreshCw, Save, Search, Trash2, Upload, Video, X } from 'lucide-react';
 import { Allowed } from '../../components/studio-access-provider';
@@ -183,41 +183,60 @@ export default function VideosAdmin() {
   const [status, setStatus] = useState<'All' | VideoStatus>('All');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
-  const visible = useMemo(() => videos.filter(video =>
-    `${video.title} ${video.description} ${video.uploaderEmail}`.toLowerCase().includes(query.toLowerCase()) && (status === 'All' || video.status === status),
-  ), [videos, query, status]);
+  const visible = videos;
+  const listRef = useRef<HTMLElement>(null), sentinelRef = useRef<HTMLDivElement>(null), generation = useRef(0), inFlight = useRef(false);
+  const [cursor, setCursor] = useState<string | null>(null), [loadingMore, setLoadingMore] = useState(false), [moreError, setMoreError] = useState(false);
 
-  async function load() {
+  const fetchPage = useCallback(async (next: string | null, current: number) => {
+    const params = new URLSearchParams({ limit: '30', q: query });
+    if (status !== 'All') params.set('status', status);
+    if (next) params.set('cursor', next);
+    const response = await api(`/api/videos?${params}`), data = await response.json();
+    if (!response.ok) throw new Error(data.error);
+    if (current !== generation.current) return;
+    const items: AdminVideo[] = data.videos ?? [];
+    setVideos(existing => {
+      if (!next) return items;
+      const known = new Set(existing.map(item => item.id));
+      return [...existing, ...items.filter(item => !known.has(item.id))];
+    });
+    if (!next) setSelected(items[0] ?? null);
+    setCursor(typeof data.nextCursor === 'string' ? data.nextCursor : null);
+  }, [query, status]);
+  const load = useCallback(async () => {
+    const current = ++generation.current;
+    inFlight.current = false;
+    setCursor(null); setMoreError(false); setLoadingMore(false);
     setLoading(true);
     try {
-      const response = await api('/api/videos');
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      const items: AdminVideo[] = data.videos ?? [];
-      setVideos(items);
-      setSelected(current => current ? items.find(item => item.id === current.id) ?? items[0] ?? null : items[0] ?? null);
-      setNotice('');
+      await fetchPage(null, current);
+      if (current === generation.current) setNotice('');
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not load videos.');
+      if (current === generation.current) setNotice(error instanceof Error ? error.message : 'Could not load videos.');
     } finally {
-      setLoading(false);
+      if (current === generation.current) setLoading(false);
     }
-  }
+  }, [fetchPage]);
 
   useEffect(() => {
-    let active = true;
-    void api('/api/videos').then(async response => {
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      if (!active) return;
-      const items: AdminVideo[] = data.videos ?? [];
-      setVideos(items);
-      setSelected(items[0] ?? null);
-    }).catch(error => {
-      if (active) setNotice(error instanceof Error ? error.message : 'Could not load videos.');
-    }).finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, []);
+    const currentGeneration = generation;
+    const timer = setTimeout(() => void load(), 200);
+    return () => { clearTimeout(timer); currentGeneration.current++; };
+  }, [load]);
+  const loadMore = useCallback(async () => {
+    if (!cursor || loading || inFlight.current) return;
+    const current = generation.current;
+    inFlight.current = true; setLoadingMore(true); setMoreError(false);
+    try { await fetchPage(cursor, current); }
+    catch { if (current === generation.current) setMoreError(true); }
+    finally { if (current === generation.current) { inFlight.current = false; setLoadingMore(false); } }
+  }, [cursor, loading, fetchPage]);
+  useEffect(() => {
+    const root = listRef.current, target = sentinelRef.current;
+    if (!root || !target || !cursor || loading || loadingMore || moreError) return;
+    const observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) void loadMore(); }, { root, rootMargin: '150px 0px' });
+    observer.observe(target); return () => observer.disconnect();
+  }, [cursor, loading, loadingMore, moreError, loadMore]);
 
   async function save(fields: { title: string; description: string; status: VideoStatus }, file: File | null) {
     const existing = editing && editing !== 'new' ? editing : null;
@@ -262,7 +281,30 @@ export default function VideosAdmin() {
     <Notice>{notice}</Notice>
     <div className="admin-toolbar"><label className="search-control"><Search size={17}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search videos"/></label><select value={status} onChange={event => setStatus(event.target.value as typeof status)}><option>All</option><option>Published</option><option>Draft</option></select><button className="icon-button" aria-label="Refresh videos" onClick={() => void load()} disabled={loading}>{loading ? <Spinner/> : <RefreshCw size={17}/>}</button><span>{visible.length} of {videos.length}</span></div>
     {loading && !videos.length ? <div className="section-loader"><Spinner label="Loading videos"/></div> : <div className="video-admin-split">
-      <aside className="video-admin-list"><div className="lore-list-heading"><strong>All videos</strong><span>{visible.length}</span></div>{visible.map(video => <button key={video.id} className={selected?.id === video.id && !editing ? 'active' : ''} onClick={() => { setSelected(video); setEditing(null); }}><span className="video-admin-list-thumb">{video.thumbnailUrl ? <img src={video.thumbnailUrl} alt=""/> : <Video size={20}/>}</span><span><strong>{video.title}</strong><small>{video.status} · {video.uploaderEmail}</small></span></button>)}{!visible.length && <p className="lore-list-empty">No matching videos.</p>}</aside>
+      <aside className="video-admin-list" ref={listRef}>
+        <div className="lore-list-heading">
+          <strong>All videos</strong>
+          <span>{visible.length}</span>
+        </div>
+        {visible.map(video => (
+          <button key={video.id} className={selected?.id === video.id && !editing ? 'active' : ''} onClick={() => { setSelected(video); setEditing(null); }}>
+            <span className="video-admin-list-thumb">
+              {video.thumbnailUrl ? <img src={video.thumbnailUrl} alt="" /> : <Video size={20} />}
+            </span>
+            <span>
+              <strong>{video.title}</strong>
+              <small>{video.status} · {video.uploaderEmail}</small>
+            </span>
+          </button>
+        ))}
+        {!visible.length && !loading && <p className="lore-list-empty">No matching videos.</p>}
+        {cursor && (
+          <div ref={sentinelRef}>
+            {loadingMore && <Spinner label="Loading videos" />}
+            {moreError && <button type="button" onClick={() => void loadMore()}>Retry</button>}
+          </div>
+        )}
+      </aside>
       <section className="video-admin-detail">{editing ? <Allowed module="videos" action={editing === 'new' ? 'add' : 'edit'}><VideoForm key={editing === 'new' ? 'new' : editing.id} video={editing === 'new' ? null : editing} onCancel={() => setEditing(null)} onSave={save}/></Allowed> : selected ? <VideoView video={selected} onEdit={() => setEditing(selected)} onDelete={() => void remove(selected)}/> : <EmptyState title="Choose a video" description="Select a video or upload a new one." action={<Allowed module="videos" action="add"><button className="button primary" onClick={create}><Plus size={17}/>Add video</button></Allowed>}/>}</section>
     </div>}
   </AdminShell>;

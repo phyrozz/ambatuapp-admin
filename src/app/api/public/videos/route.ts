@@ -1,5 +1,6 @@
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { isDevContentSnapshot } from '../../../../lib/dev-content-db';
+import { isDevContentSnapshot, isDevVideoWriter } from '../../../../lib/dev-content-db';
+import { createVideo } from '../../../../lib/dev-videos';
 import { devContentRead } from '../../../../lib/dev-content-read';
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../lib/firebase-admin';
@@ -164,6 +165,13 @@ export async function POST(request: Request) {
     const uploadedVideo = await headVideoObject(videoKey);
     if (uploadedVideo.Metadata?.['ambatu-compression'] !== VIDEO_COMPRESSION_VERSION || uploadedVideo.ContentType !== 'video/mp4') throw new Error('Wait for video compression to finish.');
     const profile = (await playerDisplayProfiles([player.id], new Map([[player.id, player.email]]))).get(player.id);
+    if (isDevVideoWriter()) {
+      const uploader = profile?.username ?? fallbackPlayerName(player.email);
+      const row = await createVideo({ title: title.trim(), description: description.trim(), status: 'Published' }, { videoKey, thumbnailKey }, { uploaderId: player.id, name: uploader, email: player.email });
+      return NextResponse.json({ id: row.id, title: row.title, description: row.description, uploader, uploaderId: player.id, uploaderAvatarUrl: profile?.avatarUrl ?? null,
+        videoUrl: await signedVideoUrl(videoKey), downloadUrl: await signedVideoUrl(videoKey, `${row.id}.mp4`), thumbnailUrl: await signedVideoUrl(thumbnailKey),
+        upvotes: 0, downvotes: 0, commentCount: 0, userVote: 0, createdAt: row.created_at?.toISOString() ?? null }, { status: 201, headers });
+    }
     const data = { title: title.trim(), description: description.trim(), videoKey, thumbnailKey, uploaderEmail: player.email, uploaderName: profile?.username ?? fallbackPlayerName(player.email), uploaderId: player.id, status: 'Published', upvotes: 0, downvotes: 0, commentCount: 0, createdAt: FieldValue.serverTimestamp() };
     const ref = await adminDb.collection('videos').add(data);
     return NextResponse.json({ id: ref.id, ...data, uploader: profile?.username ?? fallbackPlayerName(player.email), uploaderAvatarUrl: profile?.avatarUrl ?? null, videoUrl: await signedVideoUrl(videoKey), downloadUrl: await signedVideoUrl(videoKey, `${ref.id}.mp4`), thumbnailUrl: await signedVideoUrl(thumbnailKey), userVote: 0, createdAt: new Date().toISOString() }, { status: 201, headers });

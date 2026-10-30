@@ -1,5 +1,7 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { profileAvatarUrl } from './profile-avatars';
+import { isDevVideoWriter } from './dev-content-db';
+import { creatorClipCount } from './dev-videos';
 
 export const creatorHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,7 +21,7 @@ export async function creatorProfile(db: Firestore, id: string, viewerId: string
   const [followers, friends, uploads, relationship, following, avatarUrl] = await Promise.all([
     ref.collection('followers').count().get(),
     ref.collection('friends').where('state', '==', 'accepted').count().get(),
-    (own ? clips : clips.where('status', '==', 'Published')).count().get(),
+    isDevVideoWriter() ? creatorClipCount(id, own) : (own ? clips : clips.where('status', '==', 'Published')).count().get().then(result => result.data().count),
     own ? null : db.collection('playerProfiles').doc(viewerId).collection('friends').doc(id).get(),
     own ? null : db.collection('playerProfiles').doc(viewerId).collection('following').doc(id).get(),
     profileAvatarUrl(typeof data.avatarKey === 'string' ? data.avatarKey : undefined),
@@ -32,7 +34,7 @@ export async function creatorProfile(db: Firestore, id: string, viewerId: string
     joinedAt: data.createdAt?.toDate?.().toISOString() ?? null,
     followerCount: followers.data().count,
     friendCount: friends.data().count,
-    clipCount: uploads.data().count,
+    clipCount: uploads,
     following: following?.exists === true,
     friendState: relationship?.data()?.state ?? null,
   };

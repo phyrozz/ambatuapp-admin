@@ -1,5 +1,8 @@
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
+import { isDevVideoWriter } from '../../../../../../lib/dev-content-db';
+import { createVideoComment, listVideoComments } from '../../../../../../lib/dev-video-interactions';
+import { encodeLoreCommentCursor, parseLoreCommentCursor } from '../../../../../../lib/lore-comment-cursor';
 import { adminDb } from '../../../../../../lib/firebase-admin';
 import { playerFromRequest, requirePlayer } from '../../../../../../lib/player-auth';
 import { fallbackPlayerName, playerDisplayProfiles } from '../../../../../../lib/player-profiles';
@@ -11,19 +14,32 @@ export function OPTIONS() { return new NextResponse(null, { headers }); }
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!adminDb) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503, headers });
   const { id } = await params;
+  const url = new URL(request.url);
+  let cursor;
+  try { cursor = parseLoreCommentCursor(url.searchParams.get('cursor'), `video:${id}`); }
+  catch { return NextResponse.json({ error: 'Invalid comment cursor.' }, { status: 400, headers }); }
+  const requested = Number(url.searchParams.get('limit')) || 20;
+  const limit = Math.min(50, Math.max(1, Math.floor(Number.isFinite(requested) ? requested : 20)));
+  let playerId: string | null = null;
+  try { playerId = (await playerFromRequest(request))?.id ?? null; } catch {}
+  if (isDevVideoWriter()) {
+    try {
+      const result = await listVideoComments(id, playerId, url);
+      return result ? NextResponse.json(result, { headers }) : NextResponse.json({ error: 'Video not found.' }, { status: 404, headers });
+    } catch { return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503, headers }); }
+  }
   const video = await adminDb.collection('videos').doc(id).get();
   if (!video.exists || video.data()?.status !== 'Published') return NextResponse.json({ error: 'Video not found.' }, { status: 404, headers });
-  const snapshot = await video.ref.collection('comments').orderBy('createdAt', 'desc').limit(50).get();
-  let voterId: string | null = null;
-  try {
-    const player = await playerFromRequest(request);
-    if (player) voterId = `user:${player.id}`;
-  } catch {}
+  let query = video.ref.collection('comments').orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc').limit(limit + 1);
+  if (cursor) query = query.startAfter(cursor.time === null ? null : new Timestamp(Math.floor(Date.parse(cursor.time) / 1000), Number(cursor.time.slice(20, -1).padEnd(9, '0'))), cursor.id);
+  const snapshot = await query.get();
+  const page = snapshot.docs.slice(0, limit);
+  const voterId = playerId ? `user:${playerId}` : null;
   const profiles = await playerDisplayProfiles(
-    snapshot.docs.map(doc => doc.data().authorId).filter((authorId, index): authorId is string => typeof authorId === 'string' && typeof snapshot.docs[index].data().authorEmail === 'string'),
-    new Map(snapshot.docs.map(doc => [doc.data().authorId, doc.data().authorEmail ?? ''])),
+    page.map(doc => doc.data().authorId).filter((authorId, index): authorId is string => typeof authorId === 'string' && typeof page[index].data().authorEmail === 'string'),
+    new Map(page.map(doc => [doc.data().authorId, doc.data().authorEmail ?? ''])),
   );
-  const comments = await Promise.all(snapshot.docs.map(async doc => {
+  const comments = await Promise.all(page.map(async doc => {
     const data = doc.data();
     const profile = typeof data.authorId === 'string' ? profiles.get(data.authorId) : undefined;
     const vote = voterId ? (await doc.ref.collection('votes').doc(voterId).get()).data()?.value ?? 0 : 0;
@@ -40,7 +56,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       userVote: vote,
     };
   }));
-  return NextResponse.json({ comments }, { headers });
+  const last = page.at(-1), timestamp = last?.data().createdAt;
+  const time = timestamp instanceof Timestamp ? new Date(timestamp.seconds * 1000).toISOString().replace(/\.\d{3}Z$/, `.${String(timestamp.nanoseconds).padStart(9, '0')}Z`) : null;
+  const nextCursor = snapshot.docs.length > limit && last ? encodeLoreCommentCursor({ v: 1, loreId: `video:${id}`, id: last.id, time }) : null;
+  return NextResponse.json({ comments, nextCursor }, { headers });
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -61,6 +80,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       { key: 'minute', max: 5, windowMs: 60_000 },
       { key: 'hour', max: 30, windowMs: 60 * 60_000 },
     ])) return NextResponse.json({ error: 'RATE_LIMITED' }, { status: 429, headers });
+    if (isDevVideoWriter()) return NextResponse.json(await createVideoComment(id, player, text, parentId ?? null), { status: 201, headers });
     const video = adminDb.collection('videos').doc(id);
     const data = (await video.get()).data();
     if (!data || data.status !== 'Published') throw new Error('Video not found.');

@@ -1,5 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore';
-import { isDevContentSnapshot } from '../../../../../lib/dev-content-db';
+import { isDevContentSnapshot, isDevVideoWriter } from '../../../../../lib/dev-content-db';
+import { deleteManagedVideo, editPlayerVideo } from '../../../../../lib/dev-videos';
 import { devContentRead } from '../../../../../lib/dev-content-read';
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../../lib/firebase-admin';
@@ -40,6 +41,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const ref = adminDb.collection('videos').doc(id);
 
   try {
+    if (isDevVideoWriter()) {
+      if (!await allowPlayerWrite(adminDb, player.id, 'videoManage', [{ key: 'minute', max: 15, windowMs: 60_000 }, { key: 'day', max: 100, windowMs: 24 * 60 * 60_000 }])) return NextResponse.json({ error: 'RATE_LIMITED' }, { status: 429, headers });
+      let body: Record<string, unknown>;
+      try { const parsed = await request.json(); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(); body = parsed; }
+      catch { return NextResponse.json({ error: 'INVALID_REQUEST' }, { status: 400, headers }); }
+      const title = typeof body.title === 'string' ? body.title.trim() : '';
+      const description = typeof body.description === 'string' ? body.description.trim() : '';
+      if (!title || title.length > 120) return NextResponse.json({ error: 'INVALID_TITLE' }, { status: 400, headers });
+      if (description.length > 1000) return NextResponse.json({ error: 'INVALID_DESCRIPTION' }, { status: 400, headers });
+      return await editPlayerVideo(player.id, id, title, description) ? NextResponse.json({ id, title, description }, { headers }) : NextResponse.json({ error: 'VIDEO_NOT_FOUND' }, { status: 404, headers });
+    }
     const snapshot = await ref.get();
     const prior = snapshot.data();
     if (!prior || prior.status !== 'Published' || prior.uploaderId !== player.id) {
@@ -81,6 +93,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const ref = adminDb.collection('videos').doc(id);
 
   try {
+    if (isDevVideoWriter()) {
+      if (!await allowPlayerWrite(adminDb, player.id, 'videoManage', [{ key: 'minute', max: 15, windowMs: 60_000 }, { key: 'day', max: 100, windowMs: 24 * 60 * 60_000 }])) return NextResponse.json({ error: 'RATE_LIMITED' }, { status: 429, headers });
+      return await deleteManagedVideo(id, undefined, player.id) ? NextResponse.json({ ok: true }, { headers }) : NextResponse.json({ error: 'VIDEO_NOT_FOUND' }, { status: 404, headers });
+    }
     const snapshot = await ref.get();
     const prior = snapshot.data();
     if (!prior || prior.status !== 'Published' || prior.uploaderId !== player.id) {

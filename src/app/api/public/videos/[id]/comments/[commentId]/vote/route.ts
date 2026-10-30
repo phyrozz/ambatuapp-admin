@@ -1,5 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
+import { isDevVideoWriter } from '../../../../../../../../lib/dev-content-db';
+import { voteVideo } from '../../../../../../../../lib/dev-video-interactions';
 import { adminDb } from '../../../../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../../../../lib/player-auth';
 import { allowPlayerWrite } from '../../../../../../../../lib/public-write-limits';
@@ -23,6 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!await allowPlayerWrite(adminDb, player.id, 'videoVotes', [{ key: 'minute', max: 30, windowMs: 60_000 }])) {
       return NextResponse.json({ error: 'RATE_LIMITED' }, { status: 429, headers });
     }
+    if (isDevVideoWriter()) return NextResponse.json(await voteVideo(id, player.id, value, commentId), { headers });
     const video = adminDb.collection('videos').doc(id);
     const comment = video.collection('comments').doc(commentId);
     const vote = comment.collection('votes').doc(`user:${player.id}`);

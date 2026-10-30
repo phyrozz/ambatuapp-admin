@@ -1,5 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
+import { isDevVideoWriter } from '../../../../lib/dev-content-db';
+import { deleteManagedVideo, editStudioVideo } from '../../../../lib/dev-videos';
 import { requireAdmin } from '../../../../lib/api-auth';
 import { adminErrorStatus } from '../../../../lib/studio-api';
 import { adminDb } from '../../../../lib/firebase-admin';
@@ -15,6 +17,17 @@ export async function PATCH(request: Request, { params }: Context) {
     const actor = await requireAdmin(request);
     if (!adminDb) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503 });
     const { id } = await params;
+    if (isDevVideoWriter()) {
+      const body = await request.json();
+      const fields = videoFields(body);
+      const keys = body.videoKey || body.thumbnailKey ? adminUploadKeys(body, studioContentOwner(actor)) : undefined;
+      if (keys) {
+        const uploaded = await headVideoObject(keys.videoKey);
+        if (uploaded.Metadata?.['ambatu-compression'] !== VIDEO_COMPRESSION_VERSION || uploaded.ContentType !== 'video/mp4') throw new Error('Wait for video compression to finish.');
+      }
+      const result = await editStudioVideo(actor, id, fields, keys);
+      return result ? NextResponse.json(result) : NextResponse.json({ error: 'Video not found.' }, { status: 404 });
+    }
     const ref = adminDb.collection('videos').doc(id);
     const snapshot = await ref.get();
     const prior = snapshot.data();
@@ -39,6 +52,10 @@ export async function DELETE(request: Request, { params }: Context) {
     const actor = await requireAdmin(request);
     if (!adminDb) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503 });
     const { id } = await params;
+    if (isDevVideoWriter()) {
+      const removed = await deleteManagedVideo(id, actor);
+      return removed ? NextResponse.json({ id }) : NextResponse.json({ error: 'Video not found.' }, { status: 404 });
+    }
     const ref = adminDb.collection('videos').doc(id);
     const snapshot = await ref.get();
     const prior = snapshot.data();
