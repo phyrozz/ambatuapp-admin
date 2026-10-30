@@ -1,5 +1,7 @@
 import { adminDb } from './firebase-admin';
 import { profileAvatarUrl } from './profile-avatars';
+import { isDevProfileWriter } from './dev-content-db';
+import { getDisplayProfiles } from './dev-profiles';
 
 export type PlayerProfile = { username: string; birthDate: string | null };
 export type PlayerDisplayProfile = { username: string; avatarUrl: string | null };
@@ -14,6 +16,7 @@ export async function playerNames(ids: readonly string[], fallback: ReadonlyMap<
 }
 
 export async function playerDisplayProfiles(ids: readonly string[], fallback: ReadonlyMap<string, string>) {
+  if (isDevProfileWriter()) return getDisplayProfiles(ids, fallback);
   const db = adminDb;
   if (!db || !ids.length) return new Map<string, PlayerDisplayProfile>();
   const unique = [...new Set(ids)];

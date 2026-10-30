@@ -1,5 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import { isDevProfileWriter } from '../../../../../lib/dev-content-db';
+import { initializeProfile } from '../../../../../lib/dev-profiles';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../lib/player-auth';
 import { profileAvatarUrl } from '../../../../../lib/profile-avatars';
@@ -24,6 +26,7 @@ export async function POST(request: Request) {
   try {
     if (!adminDb) throw new Error('Player profile service is not configured.');
     const player = await requirePlayer(request);
+    if (isDevProfileWriter()) return NextResponse.json(await initializeProfile(player.id, player.email, player.emailVerified ? emailSearchKey(player.email) : null), { headers });
     const profiles = adminDb.collection('playerProfiles');
     const claims = adminDb.collection('playerUsernameClaims');
     const profileRef = profiles.doc(player.id);

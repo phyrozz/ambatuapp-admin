@@ -1,6 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
-import { isDevSocialWriter } from '../../../../../../lib/dev-content-db';
+import { isDevProfileWriter, isDevSocialWriter } from '../../../../../../lib/dev-content-db';
+import { getProfilePublic } from '../../../../../../lib/dev-profiles';
 import { changeFollow } from '../../../../../../lib/dev-social';
 import { adminDb } from '../../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../../lib/player-auth';
@@ -24,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { action } = await request.json();
     if (!['follow', 'unfollow', 'accept'].includes(action)) return NextResponse.json({ error: 'INVALID_REQUEST' }, { status: 400, headers });
     if (isDevSocialWriter()) {
-      if (!(await db.collection('playerProfiles').doc(id).get()).exists) throw new Error('PLAYER_NOT_FOUND');
+      if (!(isDevProfileWriter() ? await getProfilePublic(id) : (await db.collection('playerProfiles').doc(id).get()).exists)) throw new Error('PLAYER_NOT_FOUND');
       const result = await changeFollow(player.id, id, action as FollowAction);
       if (result.notify) {
         try { const sender = (await playerDisplayProfiles([player.id], new Map([[player.id, player.email]]))).get(player.id); await notifyFriendRequest(id, sender?.username ?? player.email.split('@')[0]); }

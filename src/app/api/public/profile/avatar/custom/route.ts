@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevProfileWriter } from '../../../../../../lib/dev-content-db';
+import { setCustomAvatar } from '../../../../../../lib/dev-profiles';
 import { adminDb } from '../../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../../lib/player-auth';
 import { bestEffortDeleteProfileAvatar, newProfileAvatarKey, PROFILE_AVATAR_LIMIT, profileAvatarUrl, readJpegDimensions, uploadProfileAvatar } from '../../../../../../lib/profile-avatars';
@@ -26,6 +28,11 @@ export async function POST(request: Request) {
     const imageKey = newProfileAvatarKey('custom', 'jpg');
     uploadedKey = imageKey;
     await uploadProfileAvatar(imageKey, bytes, 'image/jpeg', 'private, no-store, max-age=0, must-revalidate');
+    if (isDevProfileWriter()) {
+      await setCustomAvatar(player.id, player.email, imageKey);
+      uploadedKey = undefined;
+      return NextResponse.json({ avatarType: 'custom', avatarUrl: await profileAvatarUrl(imageKey) }, { status: 200, headers });
+    }
     const previousKey = await adminDb.runTransaction(async transaction => {
       const profileSnapshot = await transaction.get(profileRef);
       const profile = profileSnapshot.data() ?? {};

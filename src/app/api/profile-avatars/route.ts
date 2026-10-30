@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevProfileWriter } from '../../../lib/dev-content-db';
+import { addPreset, listPresets } from '../../../lib/dev-profiles';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '../../../lib/firebase-admin';
 import { requireAdmin } from '../../../lib/api-auth';
@@ -11,6 +13,7 @@ export async function GET(request: Request) {
   try {
     await requireAdmin(request);
     if (!adminDb) return NextResponse.json({ avatars: [] }, { status: 200 });
+    if (isDevProfileWriter()) return NextResponse.json({ avatars: await listPresets(true) });
     const snapshot = await adminDb.collection('profileAvatars').orderBy('createdAt', 'desc').get();
     const avatars = await Promise.all(snapshot.docs.map(async doc => {
       const users = await adminDb!.collection('playerProfiles').where('avatarId', '==', doc.id).count().get();
@@ -38,6 +41,13 @@ export async function POST(request: Request) {
     const id = crypto.randomUUID();
     imageKey = newProfileAvatarKey('presets', extension);
     await uploadProfileAvatar(imageKey, bytes, extension === 'png' ? 'image/png' : 'image/jpeg');
+    if (isDevProfileWriter()) {
+      await addPreset(id, name, imageKey, extension === 'png' ? 'image/png' : 'image/jpeg');
+      const savedKey = imageKey;
+      imageKey = undefined;
+      const imageUrl = await profileAvatarUrl(savedKey);
+      return NextResponse.json({ id, name, imageUrl, userCount: 0 }, { status: 201 });
+    }
     await adminDb.collection('profileAvatars').doc(id).set({ name, imageKey, contentType: extension === 'png' ? 'image/png' : 'image/jpeg', createdAt: FieldValue.serverTimestamp() });
     return NextResponse.json({ id, name, imageUrl: await profileAvatarUrl(imageKey), userCount: 0 }, { status: 201 });
   } catch (error) {

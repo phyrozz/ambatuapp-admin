@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevProfileWriter } from '../../../lib/dev-content-db';
+import { dashboardCounts } from '../../../lib/dev-profiles';
 import { Timestamp } from 'firebase-admin/firestore';
 import { requireAdmin } from '../../../lib/api-auth';
 import { studioDb } from '../../../lib/studio-access';
@@ -7,6 +9,7 @@ import { studioError } from '../../../lib/studio-api';
 export async function GET(request: Request) {
   try {
     await requireAdmin(request, { module: 'dashboard', action: 'view' });
+    if (isDevProfileWriter()) return NextResponse.json({ ...await dashboardCounts(), asOf: new Date().toISOString() }, { headers: { 'Cache-Control': 'no-store' } });
     const profiles = studioDb().collection('playerProfiles');
     const now = Date.now();
     const since = (days: number) => Timestamp.fromMillis(now - days * 24 * 60 * 60 * 1000);

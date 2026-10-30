@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevProfileWriter } from '../../../../../lib/dev-content-db';
+import { choosePreset } from '../../../../../lib/dev-profiles';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../lib/player-auth';
 import { bestEffortDeleteProfileAvatar } from '../../../../../lib/profile-avatars';
@@ -12,6 +14,11 @@ export async function POST(request: Request) {
     if (!adminDb) return NextResponse.json({ error: 'Profile service is not configured.' }, { status: 503, headers });
     const player = await requirePlayer(request);
     const { avatarId } = await request.json() as { avatarId?: unknown };
+    if (isDevProfileWriter()) {
+      if (avatarId !== null && (typeof avatarId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(avatarId))) return NextResponse.json({ error: 'Choose a valid avatar.' }, { status: 400, headers });
+      await choosePreset(player.id, avatarId);
+      return NextResponse.json({ avatarType: avatarId ? 'preset' : null, avatarId: avatarId ?? null }, { headers });
+    }
     const profileRef = adminDb.collection('playerProfiles').doc(player.id);
     const moderationRef = adminDb.collection('profileAvatarModeration').doc(player.id);
     let presetRef: FirebaseFirestore.DocumentReference | null = null;

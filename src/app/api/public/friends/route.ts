@@ -1,6 +1,7 @@
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
-import { isDevSocialWriter } from '../../../../lib/dev-content-db';
+import { isDevProfileWriter, isDevSocialWriter } from '../../../../lib/dev-content-db';
+import { getProfilePublic } from '../../../../lib/dev-profiles';
 import { changeFriend, listFriends } from '../../../../lib/dev-social';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../lib/player-auth';
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
     const { targetId, action } = await request.json();
     if (!validFriendId(targetId) || targetId === player.id || !['request', 'accept', 'remove', 'pin', 'unpin'].includes(action)) return NextResponse.json({ error: 'INVALID_REQUEST' }, { status: 400, headers });
     if (isDevSocialWriter()) {
-      if (action !== 'remove' && !(await db.collection('playerProfiles').doc(targetId).get()).exists) throw new Error('PLAYER_NOT_FOUND');
+      if (action !== 'remove' && !(isDevProfileWriter() ? await getProfilePublic(targetId) : (await db.collection('playerProfiles').doc(targetId).get()).exists)) throw new Error('PLAYER_NOT_FOUND');
       const result = await changeFriend(player.id, targetId, action);
       if (result.notify) {
         try { const sender = (await playerDisplayProfiles([player.id], new Map([[player.id, player.email]]))).get(player.id); await notifyFriendRequest(targetId, sender?.username ?? player.email.split('@')[0]); }

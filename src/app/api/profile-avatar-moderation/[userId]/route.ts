@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevProfileWriter } from '../../../../lib/dev-content-db';
+import { removeCustomAvatar } from '../../../../lib/dev-profiles';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { requireAdmin } from '../../../../lib/api-auth';
@@ -12,6 +14,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ us
     const { userId } = await params;
     const { decision } = await request.json() as { decision?: unknown };
     if (decision !== 'remove') return NextResponse.json({ error: 'Choose a valid moderation action.' }, { status: 400 });
+    if (isDevProfileWriter()) { await removeCustomAvatar(userId); return NextResponse.json({ ok: true }); }
     const profileRef = adminDb.collection('playerProfiles').doc(userId);
     const moderationRef = adminDb.collection('profileAvatarModeration').doc(userId);
     const deleteKey = await adminDb.runTransaction(async transaction => {

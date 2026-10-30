@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevProfileWriter } from '../../../../lib/dev-content-db';
+import { deletePreset } from '../../../../lib/dev-profiles';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { requireAdmin } from '../../../../lib/api-auth';
 import { adminErrorStatus } from '../../../../lib/studio-api';
@@ -9,6 +11,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     await requireAdmin(request);
     if (!adminDb) return NextResponse.json({ error: 'Firestore is not configured.' }, { status: 503 });
     const { id } = await params;
+    if (isDevProfileWriter()) { await deletePreset(id); return NextResponse.json({ id }); }
     const ref = adminDb.collection('profileAvatars').doc(id);
     const key = await adminDb.runTransaction(async transaction => {
       const [snapshot, usage] = await Promise.all([

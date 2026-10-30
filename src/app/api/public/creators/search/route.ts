@@ -1,5 +1,7 @@
 import { FieldPath } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
+import { isDevProfileWriter } from '../../../../../lib/dev-content-db';
+import { searchProfiles } from '../../../../../lib/dev-profiles';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../lib/player-auth';
 import { playerDisplayProfiles } from '../../../../../lib/player-profiles';
@@ -28,6 +30,11 @@ export async function GET(request: Request) {
     } catch { return NextResponse.json({ error: 'INVALID_CURSOR' }, { status: 400, headers }); }
   }
   try {
+    if (isDevProfileWriter()) {
+      const rows = await searchProfiles(mode, queryKey, cursor), page = rows.slice(0, 15), last = page.at(-1);
+      const display = await playerDisplayProfiles(page.map(row => row.id), new Map());
+      return NextResponse.json({ players: page.map(row => ({ id: row.id, ...display.get(row.id) })), nextCursor: rows.length > 15 && last ? Buffer.from(JSON.stringify({ query: queryKey, name: last.username_lower ?? '', id: last.id })).toString('base64url') : null }, { headers });
+    }
     const profiles = db.collection('playerProfiles');
     let query = mode === 'email'
       ? profiles.where('emailSearchHash', '==', queryKey).orderBy(FieldPath.documentId()).limit(16)

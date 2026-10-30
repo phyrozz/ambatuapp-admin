@@ -1,6 +1,7 @@
 import { FieldPath } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
-import { isDevSocialWriter } from '../../../../../lib/dev-content-db';
+import { isDevProfileWriter, isDevSocialWriter } from '../../../../../lib/dev-content-db';
+import { searchProfiles } from '../../../../../lib/dev-profiles';
 import { friendRelationships } from '../../../../../lib/dev-social';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../lib/player-auth';
@@ -29,6 +30,13 @@ export async function GET(request: Request) {
     } catch { return NextResponse.json({ error: 'INVALID_CURSOR' }, { status: 400, headers }); }
   }
   try {
+    if (isDevProfileWriter()) {
+      const rows = await searchProfiles('username', q, cursor), page = rows.slice(0, 15), last = page.at(-1);
+      const ids = page.filter(row => row.id !== player.id).map(row => row.id);
+      const [profiles, relationships] = await Promise.all([playerDisplayProfiles(ids, new Map()), friendRelationships(player.id, ids)]);
+      const friends = ids.map(id => ({ id, ...profiles.get(id), state: relationships.get(id)?.state ?? null, pinned: relationships.get(id)?.pinned === true })).filter(item => matchesFriendFilter(item, filter));
+      return NextResponse.json({ friends, nextCursor: rows.length > 15 && last ? Buffer.from(JSON.stringify({ q, name: last.username_lower, id: last.id, ...filter })).toString('base64url') : null }, { headers });
+    }
     let query = db.collection('playerProfiles').where('usernameLower', '>=', q).where('usernameLower', '<=', `${q}\uf8ff`).orderBy('usernameLower').orderBy(FieldPath.documentId()).limit(16);
     if (cursor) query = query.startAfter(cursor.name, cursor.id);
     const snapshot = await query.get();

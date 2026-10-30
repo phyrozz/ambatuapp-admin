@@ -84,9 +84,10 @@ function fixture() {
       if (specifier === 'next/server') return { NextResponse };
       if (specifier === 'firebase-admin/firestore') return { Timestamp, FieldPath:{ documentId:() => '__name__' }, FieldValue:{ serverTimestamp:() => new Timestamp(1700000001) } };
       if (specifier.endsWith('/firebase-admin')) return { adminDb:db };
-      if (specifier.endsWith('/dev-content-db')) return { isDevVideoWriter: () => false, isDevSocialWriter: () => false };
+      if (specifier.endsWith('/dev-content-db')) return { isDevVideoWriter: () => false, isDevSocialWriter: () => false, isDevProfileWriter: () => false };
       if (specifier.endsWith('/dev-videos')) return {};
       if (specifier.endsWith('/dev-social')) return {};
+      if (specifier.endsWith('/dev-profiles')) return {};
       if (specifier.endsWith('/player-auth')) return { requirePlayer:async request => {
         const id = request.headers.get('authorization')?.replace('Bearer ', '');
         if (!['alice', 'bob', 'carol'].includes(id)) throw new Error('UNAUTHORIZED');

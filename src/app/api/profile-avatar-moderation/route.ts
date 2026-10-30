@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevProfileWriter } from '../../../lib/dev-content-db';
+import { listCustomAvatars } from '../../../lib/dev-profiles';
 import { adminDb } from '../../../lib/firebase-admin';
 import { requireAdmin } from '../../../lib/api-auth';
 import { adminErrorStatus } from '../../../lib/studio-api';
@@ -8,6 +10,7 @@ export async function GET(request: Request) {
   try {
     await requireAdmin(request);
     if (!adminDb) return NextResponse.json({ active: [] }, { status: 200 });
+    if (isDevProfileWriter()) return NextResponse.json({ active: await listCustomAvatars() });
     const snapshot = await adminDb.collection('playerProfiles').where('avatarType', '==', 'custom').get();
     const active = await Promise.all(snapshot.docs.filter(doc => typeof doc.data().avatarKey === 'string').map(async doc => ({
       userId: doc.id,

@@ -1,6 +1,7 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { profileAvatarUrl } from './profile-avatars';
-import { isDevSocialWriter, isDevVideoWriter } from './dev-content-db';
+import { isDevProfileWriter, isDevSocialWriter, isDevVideoWriter } from './dev-content-db';
+import { getProfilePublic } from './dev-profiles';
 import { creatorClipCount } from './dev-videos';
 import { socialCounts } from './dev-social';
 
@@ -14,9 +15,11 @@ export const creatorHeaders = {
 /** Explicit public allowlist: email, birthday, avatar keys and moderation records stay private. */
 export async function creatorProfile(db: Firestore, id: string, viewerId: string) {
   const ref = db.collection('playerProfiles').doc(id);
-  const profile = await ref.get();
-  if (!profile.exists) throw new Error('PLAYER_NOT_FOUND');
-  const data = profile.data()!;
+  const useProfile = isDevProfileWriter();
+  const profile = useProfile ? null : await ref.get();
+  const pgProfile = useProfile ? await getProfilePublic(id) : null;
+  if (useProfile ? !pgProfile : !profile?.exists) throw new Error('PLAYER_NOT_FOUND');
+  const data = profile?.data() ?? {};
   const own = id === viewerId;
   const clips = db.collection('videos').where('uploaderId', '==', id);
   const useSocial = isDevSocialWriter();
@@ -26,15 +29,15 @@ export async function creatorProfile(db: Firestore, id: string, viewerId: string
     isDevVideoWriter() ? creatorClipCount(id, own) : (own ? clips : clips.where('status', '==', 'Published')).count().get().then(result => result.data().count),
     own || useSocial ? null : db.collection('playerProfiles').doc(viewerId).collection('friends').doc(id).get(),
     own || useSocial ? null : db.collection('playerProfiles').doc(viewerId).collection('following').doc(id).get(),
-    profileAvatarUrl(typeof data.avatarKey === 'string' ? data.avatarKey : undefined),
+    useProfile ? pgProfile?.avatarUrl ?? null : profileAvatarUrl(typeof data.avatarKey === 'string' ? data.avatarKey : undefined),
     useSocial ? socialCounts(id, viewerId) : null,
   ]);
   return {
     id,
-    username: typeof data.username === 'string' ? data.username : '',
-    bio: typeof data.bio === 'string' ? data.bio : '',
+    username: useProfile ? pgProfile!.username : typeof data.username === 'string' ? data.username : '',
+    bio: useProfile ? pgProfile!.bio : typeof data.bio === 'string' ? data.bio : '',
     avatarUrl,
-    joinedAt: data.createdAt?.toDate?.().toISOString() ?? null,
+    joinedAt: useProfile ? pgProfile!.joinedAt : data.createdAt?.toDate?.().toISOString() ?? null,
     followerCount: social?.followers ?? followers!.data().count,
     friendCount: social?.friends ?? friends!.data().count,
     clipCount: uploads,

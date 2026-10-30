@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevProfileWriter } from '../../../../lib/dev-content-db';
+import { searchProfiles, getDisplayProfiles } from '../../../../lib/dev-profiles';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../lib/player-auth';
 import { profileAvatarUrl } from '../../../../lib/profile-avatars';
@@ -12,6 +14,11 @@ export async function GET(request: Request) {
     const player = await requirePlayer(request);
     const query = new URL(request.url).searchParams.get('q')?.normalize('NFKC').trim().toLocaleLowerCase() ?? '';
     if (query.length < 2 || query.length > 24) return NextResponse.json({ players: [] }, { headers });
+    if (isDevProfileWriter()) {
+      const rows = (await searchProfiles('username', query, null)).slice(0, 15).filter(row => row.id !== player.id);
+      const display = await getDisplayProfiles(rows.map(row => row.id), new Map());
+      return NextResponse.json({ players: rows.map(row => ({ id: row.id, ...display.get(row.id) })) }, { headers });
+    }
     const snapshot = await adminDb.collection('playerProfiles').where('usernameLower', '>=', query).where('usernameLower', '<=', `${query}\uf8ff`).limit(15).get();
     const players = await Promise.all(snapshot.docs.filter(doc => doc.id !== player.id).map(async doc => ({ id: doc.id, username: doc.data().username, avatarUrl: await profileAvatarUrl(typeof doc.data().avatarKey === 'string' ? doc.data().avatarKey : undefined) })));
     return NextResponse.json({ players }, { headers });

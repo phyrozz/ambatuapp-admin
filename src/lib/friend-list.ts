@@ -26,6 +26,6 @@ export function nextFriendCursor(id: string, filter: FriendFilter) {
   return !filter.state && !filter.pinned ? id : `v1.${Buffer.from(JSON.stringify({ id, ...filter })).toString('base64url')}`;
 }
 
-export function matchesFriendFilter(data: { state?: string; pinned?: boolean }, filter: FriendFilter) {
+export function matchesFriendFilter(data: { state?: string | null; pinned?: boolean }, filter: FriendFilter) {
   return (!filter.state || data.state === filter.state) && (!filter.pinned || (data.state === 'accepted' && data.pinned === true));
 }

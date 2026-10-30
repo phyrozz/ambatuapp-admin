@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevProfileWriter } from '../../../../../lib/dev-content-db';
+import { getExplicitProfiles } from '../../../../../lib/dev-profiles';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../lib/player-auth';
 import { profileAvatarUrl } from '../../../../../lib/profile-avatars';
@@ -26,6 +28,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid player IDs.' }, { status: 400, headers });
     }
     const unique = [...new Set<string>(ids)];
+    if (isDevProfileWriter()) {
+      const rows = await getExplicitProfiles(unique), names: Record<string, string> = {}, avatars: Record<string, string> = {};
+      await Promise.all(rows.map(async row => {
+        if (row.username?.trim()) names[row.id] = row.username;
+        const url = await profileAvatarUrl(row.avatar_key ?? undefined);
+        if (url) avatars[row.id] = url;
+      }));
+      return NextResponse.json({ names, avatars }, { headers });
+    }
     const refs = unique.map(id => adminDb!.collection('playerProfiles').doc(id));
     const docs = refs.length ? await adminDb.getAll(...refs) : [];
     const names: Record<string, string> = {};

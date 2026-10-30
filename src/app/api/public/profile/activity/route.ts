@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevProfileWriter } from '../../../../../lib/dev-content-db';
+import { profileActivity } from '../../../../../lib/dev-profiles';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../lib/player-auth';
@@ -22,6 +24,7 @@ export async function POST(request: Request) {
   }
   if (!adminDb) return NextResponse.json({ ok: false }, { status: 503, headers });
   try {
+    if (isDevProfileWriter()) { await profileActivity(player.id); return NextResponse.json({ ok: true }, { headers }); }
     const profile = adminDb.collection('playerProfiles').doc(player.id);
     await adminDb.runTransaction(async transaction => {
       const snapshot = await transaction.get(profile);
