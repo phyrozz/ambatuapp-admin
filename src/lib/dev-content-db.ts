@@ -40,6 +40,13 @@ export function isDevVideoWriter() {
   return true;
 }
 
+export function isDevSocialWriter() {
+  const mode = process.env.SOCIAL_WRITE_BACKEND;
+  if (!mode || mode === 'firestore') return false;
+  if (mode !== 'postgres-dev' || !isDevContentSnapshot()) throw new Error('Invalid social database configuration');
+  return true;
+}
+
 export async function withDevContentDb<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
   const { DEV_CONTENT_PG_HOST: host, DEV_CONTENT_PG_USER: user, DEV_CONTENT_PG_PASSWORD: password } = process.env;
   if (!host || !user || !password || !/^ambatu_dev_content_reader(?:\.[a-z0-9]+)?$/.test(user)) {
@@ -117,6 +124,22 @@ export async function withDevVideoDb<T>(callback: (client: PoolClient) => Promis
     await client.query('BEGIN');
     try {
       await client.query('SET LOCAL ROLE ambatu_dev_video_writer');
+      const result = await callback(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* Preserve the original error. */ }
+      throw error;
+    }
+  });
+}
+
+export async function withDevSocialDb<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
+  if (!isDevSocialWriter()) throw new Error('Dev social database is not enabled');
+  return withDevContentDb(async client => {
+    await client.query('BEGIN');
+    try {
+      await client.query('SET LOCAL ROLE ambatu_dev_social_writer');
       const result = await callback(client);
       await client.query('COMMIT');
       return result;

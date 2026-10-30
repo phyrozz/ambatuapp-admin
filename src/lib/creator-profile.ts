@@ -1,7 +1,8 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { profileAvatarUrl } from './profile-avatars';
-import { isDevVideoWriter } from './dev-content-db';
+import { isDevSocialWriter, isDevVideoWriter } from './dev-content-db';
 import { creatorClipCount } from './dev-videos';
+import { socialCounts } from './dev-social';
 
 export const creatorHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,13 +19,15 @@ export async function creatorProfile(db: Firestore, id: string, viewerId: string
   const data = profile.data()!;
   const own = id === viewerId;
   const clips = db.collection('videos').where('uploaderId', '==', id);
-  const [followers, friends, uploads, relationship, following, avatarUrl] = await Promise.all([
-    ref.collection('followers').count().get(),
-    ref.collection('friends').where('state', '==', 'accepted').count().get(),
+  const useSocial = isDevSocialWriter();
+  const [followers, friends, uploads, relationship, following, avatarUrl, social] = await Promise.all([
+    useSocial ? null : ref.collection('followers').count().get(),
+    useSocial ? null : ref.collection('friends').where('state', '==', 'accepted').count().get(),
     isDevVideoWriter() ? creatorClipCount(id, own) : (own ? clips : clips.where('status', '==', 'Published')).count().get().then(result => result.data().count),
-    own ? null : db.collection('playerProfiles').doc(viewerId).collection('friends').doc(id).get(),
-    own ? null : db.collection('playerProfiles').doc(viewerId).collection('following').doc(id).get(),
+    own || useSocial ? null : db.collection('playerProfiles').doc(viewerId).collection('friends').doc(id).get(),
+    own || useSocial ? null : db.collection('playerProfiles').doc(viewerId).collection('following').doc(id).get(),
     profileAvatarUrl(typeof data.avatarKey === 'string' ? data.avatarKey : undefined),
+    useSocial ? socialCounts(id, viewerId) : null,
   ]);
   return {
     id,
@@ -32,10 +35,10 @@ export async function creatorProfile(db: Firestore, id: string, viewerId: string
     bio: typeof data.bio === 'string' ? data.bio : '',
     avatarUrl,
     joinedAt: data.createdAt?.toDate?.().toISOString() ?? null,
-    followerCount: followers.data().count,
-    friendCount: friends.data().count,
+    followerCount: social?.followers ?? followers!.data().count,
+    friendCount: social?.friends ?? friends!.data().count,
     clipCount: uploads,
-    following: following?.exists === true,
-    friendState: relationship?.data()?.state ?? null,
+    following: own ? false : social ? social.following : following?.exists === true,
+    friendState: own ? null : social ? social.state : relationship?.data()?.state ?? null,
   };
 }

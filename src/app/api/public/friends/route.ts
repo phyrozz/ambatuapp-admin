@@ -1,5 +1,7 @@
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
+import { isDevSocialWriter } from '../../../../lib/dev-content-db';
+import { changeFriend, listFriends } from '../../../../lib/dev-social';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../lib/player-auth';
 import { playerDisplayProfiles } from '../../../../lib/player-profiles';
@@ -20,6 +22,11 @@ export async function GET(request: Request) {
     filter = friendFilter(params); cursor = friendCursor(params.get('cursor'), filter);
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'INVALID_REQUEST' }, { status: 400, headers }); }
   try {
+    if (isDevSocialWriter()) {
+      const page = await listFriends(player.id, filter, cursor);
+      const profiles = await playerDisplayProfiles(page.rows.map(row => row.other_player_id), new Map());
+      return NextResponse.json({ friends: page.rows.map(row => ({ id: row.other_player_id, ...profiles.get(row.other_player_id), state: row.state, pinned: row.pinned })), nextCursor: page.nextCursor }, { headers });
+    }
     let query = adminDb.collection('playerProfiles').doc(player.id).collection('friends').orderBy(FieldPath.documentId()).limit(21);
     if (filter.pinned) query = query.where('pinned', '==', true);
     else if (filter.state) query = query.where('state', '==', filter.state);
@@ -40,6 +47,15 @@ export async function POST(request: Request) {
   try {
     const { targetId, action } = await request.json();
     if (!validFriendId(targetId) || targetId === player.id || !['request', 'accept', 'remove', 'pin', 'unpin'].includes(action)) return NextResponse.json({ error: 'INVALID_REQUEST' }, { status: 400, headers });
+    if (isDevSocialWriter()) {
+      if (action !== 'remove' && !(await db.collection('playerProfiles').doc(targetId).get()).exists) throw new Error('PLAYER_NOT_FOUND');
+      const result = await changeFriend(player.id, targetId, action);
+      if (result.notify) {
+        try { const sender = (await playerDisplayProfiles([player.id], new Map([[player.id, player.email]]))).get(player.id); await notifyFriendRequest(targetId, sender?.username ?? player.email.split('@')[0]); }
+        catch (error) { console.error('Friend request push unavailable:', error); }
+      }
+      return NextResponse.json({ state: result.state, pinned: result.pinned }, { headers });
+    }
     const own = db.collection('playerProfiles').doc(player.id).collection('friends').doc(targetId);
     const other = db.collection('playerProfiles').doc(targetId).collection('friends').doc(player.id);
     const result = await db.runTransaction(async tx => {

@@ -1,5 +1,7 @@
 import { FieldPath } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
+import { isDevSocialWriter } from '../../../../../lib/dev-content-db';
+import { friendRelationships } from '../../../../../lib/dev-social';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../lib/player-auth';
 import { playerDisplayProfiles } from '../../../../../lib/player-profiles';
@@ -33,8 +35,9 @@ export async function GET(request: Request) {
     const page = snapshot.docs.slice(0, 15);
     const ids = page.filter(doc => doc.id !== player.id).map(doc => doc.id);
     const profiles = await playerDisplayProfiles(ids, new Map());
+    const relationships = isDevSocialWriter() ? await friendRelationships(player.id, ids) : null;
     const results = await Promise.all(ids.map(async id => {
-      const relationship = (await db.collection('playerProfiles').doc(player.id).collection('friends').doc(id).get()).data() ?? {};
+      const relationship = relationships ? relationships.get(id) ?? {} : (await db.collection('playerProfiles').doc(player.id).collection('friends').doc(id).get()).data() ?? {};
       return { id, ...profiles.get(id), state: relationship.state ?? null, pinned: relationship.pinned === true };
     }));
     const friends = results.filter(item => matchesFriendFilter(item, filter));
