@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevLeaderboardWriter } from '../../../../../lib/dev-content-db';
+import { syncScores } from '../../../../../lib/dev-leaderboards';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '../../../../../lib/firebase-admin';
@@ -48,6 +50,8 @@ export async function POST(request: Request) {
       }
       localScores[gameId] = score as number;
     }
+
+    if (isDevLeaderboardWriter()) return json({ scores: await syncScores(claims.sub, localScores) });
 
     const entries = gameIds.map((gameId) => adminDb!.collection('leaderboards').doc(gameId).collection('entries').doc(claims.sub));
     const scores = await adminDb.runTransaction(async (transaction) => {

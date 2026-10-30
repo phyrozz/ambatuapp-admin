@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevLeaderboardWriter } from '../../../../../lib/dev-content-db';
+import { submitScore, topScores } from '../../../../../lib/dev-leaderboards';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '../../../../../lib/firebase-admin';
@@ -32,6 +34,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ gam
   const { gameId } = await params;
   if (!gameIds.has(gameId)) return json({ error: 'Unknown game.' }, 404);
   if (!adminDb) return json({ error: 'Leaderboard service is not configured.' }, 503);
+  if (isDevLeaderboardWriter()) {
+    try { return json({ entries: await topScores(gameId) }); }
+    catch { return json({ error: 'Leaderboard service is not configured.' }, 503); }
+  }
   const snapshot = await adminDb.collection('leaderboards').doc(gameId).collection('entries').orderBy('score', 'desc').orderBy('updatedAt', 'asc').limit(20).get();
   const profiles = await playerDisplayProfiles(snapshot.docs.map((doc) => doc.id), new Map(snapshot.docs.map((doc) => [doc.id, doc.data().player ?? 'Player'])));
   return json({ entries: snapshot.docs.map((doc, index) => {
@@ -51,6 +57,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ gam
     const claims = await accessVerifier().verify(token);
     const { score } = await request.json();
     if (!Number.isSafeInteger(score) || score < 0 || score > 1_000_000) return json({ error: 'Invalid score.' }, 400);
+    if (isDevLeaderboardWriter()) { await submitScore(gameId, claims.sub, score); return json({ ok: true }); }
     const entry = adminDb.collection('leaderboards').doc(gameId).collection('entries').doc(claims.sub);
     await adminDb.runTransaction(async transaction => {
       const current = await transaction.get(entry);
