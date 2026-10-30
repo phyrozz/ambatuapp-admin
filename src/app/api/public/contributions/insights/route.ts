@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { isDevCharacterWriter, isDevLoreWriter } from '../../../../../lib/dev-content-db';
+import { isDevCharacterWriter, isDevLoreWriter, isDevSoundWriter } from '../../../../../lib/dev-content-db';
+import { soundInsights } from '../../../../../lib/dev-sounds';
 import { characterInsights } from '../../../../../lib/dev-characters';
 import { loreInsights } from '../../../../../lib/dev-lores';
 import { adminDb } from '../../../../../lib/firebase-admin';
@@ -20,12 +21,14 @@ export async function GET(request: Request) {
     const player = await contributionPlayer(request);
     const usePostgresCharacters = isDevCharacterWriter();
     const usePostgresLores = isDevLoreWriter();
-    const [lores, characters, sounds, postgresCharacters, postgresLores] = await Promise.all([
+    const usePostgresSounds = isDevSoundWriter();
+    const [lores, characters, sounds, postgresCharacters, postgresLores, postgresSounds] = await Promise.all([
       usePostgresLores ? Promise.resolve(null) : adminDb!.collection('lores').where('uploaderId', '==', player.id).get(),
       usePostgresCharacters ? Promise.resolve(null) : adminDb!.collection('characters').where('uploaderId', '==', player.id).get(),
-      adminDb!.collection('soundboardSounds').where('uploaderId', '==', player.id).get(),
+      usePostgresSounds ? Promise.resolve(null) : adminDb!.collection('soundboardSounds').where('uploaderId', '==', player.id).get(),
       usePostgresCharacters ? characterInsights(player.id) : Promise.resolve(null),
       usePostgresLores ? loreInsights(player.id) : Promise.resolve(null),
+      usePostgresSounds ? soundInsights(player.id) : Promise.resolve(null),
     ]);
 
     const insights = {
@@ -71,13 +74,19 @@ export async function GET(request: Request) {
       insights.published += postgresCharacters.published;
       insights.characterViews += postgresCharacters.views;
     }
-    for (const doc of sounds.docs) {
+    for (const doc of sounds?.docs ?? []) {
       const data = doc.data();
       if (data.source !== 'revamp') continue;
       if (data.status === 'Draft') insights.drafts += 1;
       else insights.published += 1;
       insights.soundPlays += count(data.playCount);
       insights.soundListeners += count(data.listenerCount);
+    }
+    if (postgresSounds) {
+      insights.drafts += postgresSounds.drafts;
+      insights.published += postgresSounds.published;
+      insights.soundPlays += postgresSounds.plays;
+      insights.soundListeners += postgresSounds.listeners;
     }
     insights.views = insights.loreViews + insights.characterViews;
 

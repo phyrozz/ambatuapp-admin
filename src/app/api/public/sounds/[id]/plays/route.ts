@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
+import { isDevSoundWriter } from '../../../../../../lib/dev-content-db';
+import { publicSoundKey, recordSoundPlay } from '../../../../../../lib/dev-sounds';
 import { adminDb } from '../../../../../../lib/firebase-admin';
 import { isPublicSound } from '../../../../../../lib/admin-sounds';
 import { playerFromRequest } from '../../../../../../lib/player-auth';
@@ -49,6 +51,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     }
     const identity = player ? `player:${player.id}` : `guest:${visitorId}`;
     const { id } = await params;
+    if (isDevSoundWriter()) {
+      if (!await publicSoundKey(id)) return NextResponse.json({ error: 'Sound not found.' }, { status: 404, headers });
+      if (!await allowPlayerWrite(adminDb, identity, 'soundPlays', [{ key: 'minute', max: 60, windowMs: 60_000 }])) return NextResponse.json({ error: 'RATE_LIMITED' }, { status: 429, headers });
+      const playCount = await recordSoundPlay(id, createHash('sha256').update(identity).digest('hex'), player?.id ?? null);
+      return playCount === null ? NextResponse.json({ error: 'Sound not found.' }, { status: 404, headers }) : NextResponse.json({ playCount }, { headers });
+    }
     const sound = adminDb.collection('soundboardSounds').doc(id);
     const snapshot = await sound.get();
     const data = snapshot.data();

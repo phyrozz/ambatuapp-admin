@@ -26,6 +26,13 @@ export function isDevLoreWriter() {
   return true;
 }
 
+export function isDevSoundWriter() {
+  const mode = process.env.SOUND_WRITE_BACKEND;
+  if (!mode || mode === 'firestore') return false;
+  if (mode !== 'postgres-dev' || !isDevContentSnapshot()) throw new Error('Invalid sound database configuration');
+  return true;
+}
+
 export async function withDevContentDb<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
   const { DEV_CONTENT_PG_HOST: host, DEV_CONTENT_PG_USER: user, DEV_CONTENT_PG_PASSWORD: password } = process.env;
   if (!host || !user || !password || !/^ambatu_dev_content_reader(?:\.[a-z0-9]+)?$/.test(user)) {
@@ -71,6 +78,22 @@ export async function withDevLoreDb<T>(callback: (client: PoolClient) => Promise
     await client.query('BEGIN');
     try {
       await client.query('SET LOCAL ROLE ambatu_dev_lore_writer');
+      const result = await callback(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* Preserve the original error. */ }
+      throw error;
+    }
+  });
+}
+
+export async function withDevSoundDb<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
+  if (!isDevSoundWriter()) throw new Error('Dev sound database is not enabled');
+  return withDevContentDb(async client => {
+    await client.query('BEGIN');
+    try {
+      await client.query('SET LOCAL ROLE ambatu_dev_sound_writer');
       const result = await callback(client);
       await client.query('COMMIT');
       return result;

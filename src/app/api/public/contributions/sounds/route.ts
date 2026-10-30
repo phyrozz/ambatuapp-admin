@@ -1,5 +1,7 @@
 import { FieldPath, FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
+import { isDevSoundWriter } from "../../../../../lib/dev-content-db";
+import { createCreatorSound, listCreatorSounds } from "../../../../../lib/dev-sounds";
 import { adminDb } from "../../../../../lib/firebase-admin";
 import {
   ContributionError,
@@ -26,6 +28,7 @@ export async function GET(request: Request) {
   try {
     const player = await contributionPlayer(request);
     const url = new URL(request.url);
+    if (isDevSoundWriter()) return NextResponse.json(await listCreatorSounds(player.id, url), { headers: contributionHeaders });
     const requestedLimit = Number(url.searchParams.get("limit")) || 20;
     const limit = Math.min(50, Math.max(1, Math.floor(requestedLimit)));
     const collection = adminDb!.collection("soundboardSounds");
@@ -112,6 +115,10 @@ export async function POST(request: Request) {
     await limitContribution(player.id, "sound-publish", 10);
     await verifySoundUpload(soundKey);
     const id = soundKey.split("/").at(-1)!.split(".")[0];
+    if (isDevSoundWriter()) {
+      await createCreatorSound(player.id, id, fields, status, soundKey);
+      return NextResponse.json({ id }, { status: 201, headers: contributionHeaders });
+    }
     const ref = adminDb!.collection("soundboardSounds").doc(id);
     await adminDb!.runTransaction(async (transaction) => {
       const existing = await transaction.get(ref);

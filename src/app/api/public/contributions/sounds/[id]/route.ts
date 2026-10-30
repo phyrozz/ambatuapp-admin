@@ -1,5 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
+import { isDevSoundWriter } from "../../../../../../lib/dev-content-db";
+import { deleteCreatorSound, editCreatorSound } from "../../../../../../lib/dev-sounds";
 import { adminDb } from "../../../../../../lib/firebase-admin";
 import {
   ContributionError,
@@ -42,6 +44,7 @@ export async function PATCH(
     const requestedStatus = body.status === undefined ? undefined : contributionStatus(body.status);
     const fields = soundFields(body);
     await limitContribution(player.id, "sound-edit", 30);
+    if (isDevSoundWriter()) return NextResponse.json(await editCreatorSound(player.id, id, fields, requestedStatus, body.soundKey), { headers: contributionHeaders });
     const ref = adminDb!.collection("soundboardSounds").doc(id);
     const current = await ref.get();
     const data = current.data();
@@ -107,6 +110,10 @@ export async function DELETE(
     const { id } = await params;
     if (!validId(id)) throw new ContributionError(404);
     await limitContribution(player.id, "sound-delete", 30);
+    if (isDevSoundWriter()) {
+      await deleteCreatorSound(player.id, id);
+      return NextResponse.json({ deleted: true }, { headers: contributionHeaders });
+    }
     const ref = adminDb!.collection("soundboardSounds").doc(id);
     let soundKey = "";
     await adminDb!.runTransaction(async (transaction) => {

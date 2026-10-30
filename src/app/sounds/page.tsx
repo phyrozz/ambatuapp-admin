@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { AudioLines, Music2, Plus, RefreshCw, Upload } from 'lucide-react';
 import { Allowed } from '../../components/studio-access-provider';
@@ -58,24 +58,60 @@ export default function SoundsAdmin() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
+  const sentinel = useRef<HTMLDivElement>(null);
+  const generation = useRef(0), inFlight = useRef(false);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false), [moreError, setMoreError] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
+    const current = ++generation.current;
+    inFlight.current = false;
+    setCursor(null);
+    setMoreError(false);
+    setLoadingMore(false);
     setLoading(true);
     try {
-      const data = await api('/api/sounds');
+      const data = await api('/api/sounds?limit=30');
+      if (current !== generation.current) return;
       setSounds(data.sounds ?? []);
+      setCursor(typeof data.nextCursor === 'string' ? data.nextCursor : null);
       setError('');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not load the sound catalog.');
+      if (current === generation.current) setError(reason instanceof Error ? reason.message : 'Could not load the sound catalog.');
     } finally {
-      setLoading(false);
+      if (current === generation.current) setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
+    const currentGeneration = generation;
     const initial = window.setTimeout(() => { void load(); }, 0);
-    return () => window.clearTimeout(initial);
-  }, []);
+    return () => { window.clearTimeout(initial); currentGeneration.current++; };
+  }, [load]);
+
+  const loadMore = useCallback(async () => {
+    if (!cursor || loading || inFlight.current) return;
+    const current = generation.current;
+    inFlight.current = true;
+    setLoadingMore(true);
+    setMoreError(false);
+    try {
+      const data = await api(`/api/sounds?${new URLSearchParams({ limit: '30', cursor })}`);
+      if (current !== generation.current) return;
+      setSounds(items => {
+        const known = new Set(items.map(item => item.id));
+        return [...items, ...(data.sounds as AdminSound[]).filter(item => !known.has(item.id))];
+      });
+      setCursor(typeof data.nextCursor === 'string' ? data.nextCursor : null);
+    } catch { if (current === generation.current) setMoreError(true); }
+    finally { if (current === generation.current) { inFlight.current = false; setLoadingMore(false); } }
+  }, [cursor, loading]);
+  useEffect(() => {
+    if (!sentinel.current || !cursor || loading || loadingMore || moreError) return;
+    const observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) void loadMore(); }, { rootMargin: '150px' });
+    observer.observe(sentinel.current);
+    return () => observer.disconnect();
+  }, [cursor, loading, loadingMore, moreError, loadMore]);
 
   async function addSound(event: FormEvent) {
     event.preventDefault();
@@ -117,6 +153,12 @@ export default function SoundsAdmin() {
       <section className="sound-admin-catalog">
         <header><div><h2><AudioLines size={19}/>Available sounds</h2><p>These clips appear in the public soundboard and chat picker.</p></div><span>{sounds.length}</span></header>
         {loading && !sounds.length ? <div className="section-loader"><Spinner label="Loading sounds"/></div> : sounds.length ? <div className="sound-admin-list">{sounds.map(sound => <article key={sound.id}><span className={`sound-admin-icon sound-color-${sound.color}`}><Music2 size={18}/></span><div className="sound-admin-meta"><strong>{sound.name}</strong><small>{sound.category}</small></div><audio controls preload="none" src={sound.audioUrl} aria-label={`Preview ${sound.name}`}/></article>)}</div> : <EmptyState title="No sounds yet" description="Add an audio clip to make it available in AmbatuChat and Soundboard."/>}
+        {cursor && (
+          <div ref={sentinel}>
+            {loadingMore && <Spinner label="Loading sounds" />}
+            {moreError && <button type="button" onClick={() => void loadMore()}>Retry</button>}
+          </div>
+        )}
       </section>
     </div>
   </AdminShell>;
