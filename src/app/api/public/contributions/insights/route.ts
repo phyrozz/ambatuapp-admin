@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { isDevCharacterWriter } from '../../../../../lib/dev-content-db';
+import { isDevCharacterWriter, isDevLoreWriter } from '../../../../../lib/dev-content-db';
 import { characterInsights } from '../../../../../lib/dev-characters';
+import { loreInsights } from '../../../../../lib/dev-lores';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { contributionError, contributionHeaders, contributionPlayer } from '../../../../../lib/community-content';
 
@@ -18,11 +19,13 @@ export async function GET(request: Request) {
   try {
     const player = await contributionPlayer(request);
     const usePostgresCharacters = isDevCharacterWriter();
-    const [lores, characters, sounds, postgresCharacters] = await Promise.all([
-      adminDb!.collection('lores').where('uploaderId', '==', player.id).get(),
+    const usePostgresLores = isDevLoreWriter();
+    const [lores, characters, sounds, postgresCharacters, postgresLores] = await Promise.all([
+      usePostgresLores ? Promise.resolve(null) : adminDb!.collection('lores').where('uploaderId', '==', player.id).get(),
       usePostgresCharacters ? Promise.resolve(null) : adminDb!.collection('characters').where('uploaderId', '==', player.id).get(),
       adminDb!.collection('soundboardSounds').where('uploaderId', '==', player.id).get(),
       usePostgresCharacters ? characterInsights(player.id) : Promise.resolve(null),
+      usePostgresLores ? loreInsights(player.id) : Promise.resolve(null),
     ]);
 
     const insights = {
@@ -38,7 +41,7 @@ export async function GET(request: Request) {
       drafts: 0,
     };
 
-    for (const doc of lores.docs) {
+    for (const doc of lores?.docs ?? []) {
       const data = doc.data();
       if (data.source !== 'revamp') continue;
       if (data.status === 'Draft') insights.drafts += 1;
@@ -47,6 +50,14 @@ export async function GET(request: Request) {
       insights.upvotes += count(data.upvotes);
       insights.downvotes += count(data.downvotes);
       insights.comments += count(data.commentCount);
+    }
+    if (postgresLores) {
+      insights.drafts += postgresLores.drafts;
+      insights.published += postgresLores.published;
+      insights.loreViews += postgresLores.views;
+      insights.upvotes += postgresLores.upvotes;
+      insights.downvotes += postgresLores.downvotes;
+      insights.comments += postgresLores.comments;
     }
     for (const doc of characters?.docs ?? []) {
       const data = doc.data();

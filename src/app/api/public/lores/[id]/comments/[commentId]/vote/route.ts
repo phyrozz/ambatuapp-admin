@@ -1,4 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore';
+import { isDevLoreWriter } from '../../../../../../../../lib/dev-content-db';
+import { voteLore } from '../../../../../../../../lib/dev-lore-interactions';
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../../../../lib/player-auth';
@@ -14,6 +16,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id, commentId } = await params;
     const { value } = await request.json();
     if (![1, -1].includes(value)) throw new Error('Invalid vote.');
+    if (isDevLoreWriter()) return NextResponse.json(await voteLore(id, player.id, value, commentId), { headers });
     const lore = adminDb.collection('lores').doc(id);
     const comment = lore.collection('comments').doc(commentId);
     const vote = comment.collection('votes').doc(player.id);

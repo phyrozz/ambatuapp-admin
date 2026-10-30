@@ -1,4 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
+import { isDevLoreWriter } from "../../../../../../lib/dev-content-db";
+import { deleteCreatorLore, editCreatorLore } from "../../../../../../lib/dev-lores";
 import { NextResponse } from "next/server";
 import { adminDb } from "../../../../../../lib/firebase-admin";
 import {
@@ -42,6 +44,7 @@ export async function PATCH(
     const fields = loreFields(body, player.id);
     await limitContribution(player.id, "lore-edit", 30);
     await Promise.all(fields.imageKeys.map(verifyPlayerLoreImage));
+    if (isDevLoreWriter()) return NextResponse.json(await editCreatorLore(player.id, id, fields, requestedStatus), { headers: contributionHeaders });
     const ref = adminDb!.collection("lores").doc(id);
     let oldImages: string[] = [];
     let status: 'Draft' | 'Published' = 'Published';
@@ -101,6 +104,10 @@ export async function DELETE(
     )
       throw new ContributionError(404);
     await limitContribution(player.id, "lore-delete", 30);
+    if (isDevLoreWriter()) {
+      await deleteCreatorLore(player.id, id);
+      return NextResponse.json({ deleted: true }, { headers: contributionHeaders });
+    }
     const ref = adminDb!.collection("lores").doc(id);
     let imageKeys: string[] = [];
     await adminDb!.runTransaction(async (transaction) => {

@@ -1,4 +1,6 @@
 import { FieldPath, FieldValue } from "firebase-admin/firestore";
+import { isDevLoreWriter } from "../../../../../lib/dev-content-db";
+import { createCreatorLore, listCreatorLores } from "../../../../../lib/dev-lores";
 import { NextResponse } from "next/server";
 import { adminDb } from "../../../../../lib/firebase-admin";
 import { signedCharacterImageUrl } from "../../../../../lib/s3-images";
@@ -45,6 +47,7 @@ export async function GET(request: Request) {
   try {
     const player = await contributionPlayer(request);
     const url = new URL(request.url);
+    if (isDevLoreWriter()) return NextResponse.json(await listCreatorLores(player.id, url), { headers: contributionHeaders });
     const requestedLimit = Number(url.searchParams.get("limit")) || 20;
     const limit = Math.min(50, Math.max(1, Math.floor(requestedLimit)));
     const collection = adminDb!.collection("lores");
@@ -166,6 +169,10 @@ export async function POST(request: Request) {
       throw new ContributionError(400);
     await limitContribution(player.id, "lore-publish", 10);
     await Promise.all(imageKeys.map(verifyPlayerLoreImage));
+    if (isDevLoreWriter()) {
+      await createCreatorLore(player.id, body.submissionId, { title, text, tags, translations, imageKeys }, status);
+      return NextResponse.json({ id: body.submissionId }, { status: 201, headers: contributionHeaders });
+    }
     const ref = adminDb!.collection("lores").doc(body.submissionId);
     await adminDb!.runTransaction(async (transaction) => {
       const existing = await transaction.get(ref);
