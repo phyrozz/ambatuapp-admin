@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevContentSnapshot } from '../../../../../lib/dev-content-db';
+import { devContentRead } from '../../../../../lib/dev-content-read';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { signedCharacterImageUrl } from '../../../../../lib/s3-images';
 import { playerFromRequest } from '../../../../../lib/player-auth';
@@ -9,6 +11,7 @@ const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Head
 export function OPTIONS() { return new NextResponse(null, { headers }); }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (isDevContentSnapshot()) return devContentRead('lore', request, (await params).id);
   if (!adminDb) return NextResponse.json({ error: 'Lore service is not configured.' }, { status: 503, headers });
   const { id } = await params;
   const loreRef = adminDb.collection('lores').doc(id);

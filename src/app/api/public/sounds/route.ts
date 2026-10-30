@@ -1,4 +1,6 @@
 import { FieldPath } from 'firebase-admin/firestore';
+import { isDevContentSnapshot } from '../../../../lib/dev-content-db';
+import { devContentRead } from '../../../../lib/dev-content-read';
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { isPublicSound, soundAudioUrl, soundResponse } from '../../../../lib/admin-sounds';
@@ -17,6 +19,7 @@ export function OPTIONS() {
 }
 
 export async function GET(request: Request) {
+  if (isDevContentSnapshot()) return devContentRead('sound', request);
   if (!adminDb) return NextResponse.json({ error: 'Sound catalog is not configured.' }, { status: 503, headers });
   try {
     const url = new URL(request.url);

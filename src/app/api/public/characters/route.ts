@@ -1,4 +1,6 @@
 import { FieldPath } from 'firebase-admin/firestore';
+import { isDevContentSnapshot } from '../../../../lib/dev-content-db';
+import { devContentRead } from '../../../../lib/dev-content-read';
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { characterImageKey, signedCharacterImageUrl } from '../../../../lib/s3-images';
@@ -22,6 +24,7 @@ function characterFromDocument(id: string, data: Record<string, unknown>) {
 }
 
 export async function GET(request: Request) {
+  if (isDevContentSnapshot()) return devContentRead('character', request);
   if (!adminDb) return NextResponse.json({ error: 'Character service is not configured.' }, { status: 503, headers });
   const url = new URL(request.url);
   const paginated = url.searchParams.has('limit') || url.searchParams.has('cursor');

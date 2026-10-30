@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevContentSnapshot } from '../../../../../lib/dev-content-db';
+import { devContentRead } from '../../../../../lib/dev-content-read';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { isPublicSound, soundAudioUrl, soundResponse } from '../../../../../lib/admin-sounds';
 import { validSoundAssetKey } from '../../../../../lib/s3-sounds';
@@ -16,6 +18,7 @@ export function OPTIONS() {
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (isDevContentSnapshot()) return devContentRead('sound', request, (await params).id);
   if (!adminDb) return NextResponse.json({ error: 'Sound catalog is not configured.' }, { status: 503, headers });
   try {
     const { id } = await params;

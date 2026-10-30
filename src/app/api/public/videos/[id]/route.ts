@@ -1,4 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore';
+import { isDevContentSnapshot } from '../../../../../lib/dev-content-db';
+import { devContentRead } from '../../../../../lib/dev-content-read';
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { deleteVideoAssets } from '../../../../../lib/admin-video';
@@ -10,6 +12,7 @@ import { allowPlayerWrite } from '../../../../../lib/public-write-limits';
 const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type, authorization', 'Access-Control-Allow-Methods': 'GET, PATCH, DELETE, OPTIONS', 'Cache-Control': 'no-store' };
 export function OPTIONS() { return new NextResponse(null, { headers }); }
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (isDevContentSnapshot()) return devContentRead('video', request, (await params).id);
   if (!adminDb) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503, headers });
   const { id } = await params;
   const snapshot = await adminDb.collection('videos').doc(id).get();

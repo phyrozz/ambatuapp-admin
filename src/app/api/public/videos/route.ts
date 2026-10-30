@@ -1,4 +1,6 @@
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { isDevContentSnapshot } from '../../../../lib/dev-content-db';
+import { devContentRead } from '../../../../lib/dev-content-read';
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../lib/player-auth';
@@ -68,6 +70,7 @@ function relevanceScore(data: { upvotes?: number; commentCount?: number; created
 }
 
 export async function GET(request: Request) {
+  if (isDevContentSnapshot()) return devContentRead('video', request);
   if (!adminDb) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503, headers });
   const url = new URL(request.url);
   const limit = Math.min(18, Math.max(1, Number(url.searchParams.get('limit')) || 8));

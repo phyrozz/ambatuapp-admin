@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevContentSnapshot } from '../../../../lib/dev-content-db';
+import { devContentRead } from '../../../../lib/dev-content-read';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { signedCharacterImageUrl } from '../../../../lib/s3-images';
 import { playerDisplayProfiles } from '../../../../lib/player-profiles';
@@ -9,6 +11,7 @@ type Translation = { locale?: string; label?: string; title?: string; text?: str
 type LoreDocument = { id: string; title?: string; text?: string; translations?: Translation[]; tags?: string[]; imageKeys?: string[]; upvotes?: number; downvotes?: number; commentCount?: number; uploaderId?: string; source?: string; createdAt?: { toMillis?: () => number } | null };
 
 export async function GET(request: Request) {
+  if (isDevContentSnapshot()) return devContentRead('lore', request);
   if (!adminDb) return NextResponse.json({ error: 'Lore service is not configured.' }, { status: 503, headers });
   const url = new URL(request.url);
   const paginated = url.searchParams.has('limit') || url.searchParams.has('cursor');
