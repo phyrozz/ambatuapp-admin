@@ -61,6 +61,13 @@ export function isDevLeaderboardWriter() {
   return true;
 }
 
+export function isDevRateLimitWriter() {
+  const mode = process.env.RATE_LIMIT_BACKEND;
+  if (!mode || mode === 'firestore') return false;
+  if (mode !== 'postgres-dev' || !isDevContentSnapshot()) throw new Error('Invalid rate limit database configuration');
+  return true;
+}
+
 export async function withDevContentDb<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
   const { DEV_CONTENT_PG_HOST: host, DEV_CONTENT_PG_USER: user, DEV_CONTENT_PG_PASSWORD: password } = process.env;
   if (!host || !user || !password || !/^ambatu_dev_content_reader(?:\.[a-z0-9]+)?$/.test(user)) {
@@ -186,6 +193,22 @@ export async function withDevLeaderboardDb<T>(callback: (client: PoolClient) => 
     await client.query('BEGIN');
     try {
       await client.query('SET LOCAL ROLE ambatu_dev_leaderboard_writer');
+      const result = await callback(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* Preserve the original error. */ }
+      throw error;
+    }
+  });
+}
+
+export async function withDevRateLimitDb<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
+  if (!isDevRateLimitWriter()) throw new Error('Dev rate limit database is not enabled');
+  return withDevContentDb(async client => {
+    await client.query('BEGIN');
+    try {
+      await client.query('SET LOCAL ROLE ambatu_dev_rate_limit_writer');
       const result = await callback(client);
       await client.query('COMMIT');
       return result;

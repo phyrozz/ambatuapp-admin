@@ -89,3 +89,9 @@ Before switching, stop all dev profile writers and compare Firestore profiles, u
 Run `011_dev_leaderboard_writer.sql` once as the owner in **ambatu-db-dev**, then set `LEADERBOARD_WRITE_BACKEND=postgres-dev` in the local ignored `admin/.env.local` and restart the API. The existing development and snapshot guards apply. Score submissions, multi-game best-score sync, and top-20 reads use Postgres; Cognito still authenticates players.
 
 Before enabling the switch, compare all current dev Firestore leaderboard entries with the imported snapshot and pause game score submissions until every dev writer uses the updated API. There is no synchronization between the two databases. Run `PGTEST_PORT=<local port> node --test supabase/tests/leaderboard-write.test.mjs` only against a disposable local database with the dev migrations; it creates and removes fixtures and must never target Supabase.
+
+## API rate limits in dev
+
+Run `012_dev_rate_limit_writer.sql` once as the owner in **ambatu-db-dev**. Stop all dev API writers, export and reconcile the current Firestore rate-limit records into Postgres, then set `RATE_LIMIT_BACKEND=postgres-dev` in the local ignored `admin/.env.local` and restart the API. The development and snapshot guards apply. The limiter keeps the existing hashed identities, action names, and time windows, and serializes concurrent updates per identity.
+
+The original rate-limit snapshot is stale by design; active windows must be copied at cutover, and no other dev API may continue writing Firestore. The role and table remain private. Run `PGTEST_PORT=<local port> node --test supabase/tests/rate-limit-write.test.mjs` only against a disposable local database with the dev migrations; it creates and removes fixtures and must never target Supabase.
