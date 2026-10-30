@@ -12,6 +12,13 @@ export function isDevContentSnapshot() {
   return true;
 }
 
+export function isDevCharacterWriter() {
+  const mode = process.env.CHARACTER_WRITE_BACKEND;
+  if (!mode || mode === 'firestore') return false;
+  if (mode !== 'postgres-dev' || !isDevContentSnapshot()) throw new Error('Invalid character database configuration');
+  return true;
+}
+
 export async function withDevContentDb<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
   const { DEV_CONTENT_PG_HOST: host, DEV_CONTENT_PG_USER: user, DEV_CONTENT_PG_PASSWORD: password } = process.env;
   if (!host || !user || !password || !/^ambatu_dev_content_reader(?:\.[a-z0-9]+)?$/.test(user)) {
@@ -33,4 +40,20 @@ export async function withDevContentDb<T>(callback: (client: PoolClient) => Prom
     if (marker.rowCount !== 1) throw new Error('Dev content database marker is missing');
     return await callback(client);
   } finally { client.release(); }
+}
+
+export async function withDevCharacterDb<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
+  if (!isDevCharacterWriter()) throw new Error('Dev character database is not enabled');
+  return withDevContentDb(async client => {
+    await client.query('BEGIN');
+    try {
+      await client.query('SET LOCAL ROLE ambatu_dev_character_writer');
+      const result = await callback(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* The original error is more useful. */ }
+      throw error;
+    }
+  });
 }

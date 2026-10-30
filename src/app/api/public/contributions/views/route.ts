@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { isDevCharacterWriter } from '../../../../../lib/dev-content-db';
+import { recordCharacterView } from '../../../../../lib/dev-characters';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../../../lib/firebase-admin';
@@ -51,6 +53,14 @@ export async function POST(request: Request) {
   const collection = kind === 'lore' ? 'lores' : 'characters';
   const content = adminDb.collection(collection).doc(id);
   const viewKey = createHash('sha256').update(identity).digest('hex');
+  if (kind === 'character' && isDevCharacterWriter()) {
+    try {
+      const counted = await recordCharacterView(id, viewKey, player?.id ?? null);
+      return NextResponse.json({ counted }, { headers: contributionHeaders });
+    } catch {
+      return NextResponse.json({ error: 'Could not record this view.' }, { status: 503, headers: contributionHeaders });
+    }
+  }
   const visitor = content.collection('creatorViews').doc(viewKey);
 
   try {

@@ -1,4 +1,6 @@
 import { FieldPath, FieldValue } from "firebase-admin/firestore";
+import { isDevCharacterWriter } from "../../../../../lib/dev-content-db";
+import { createCreatorCharacter, listCreatorCharacters } from "../../../../../lib/dev-characters";
 import { NextResponse } from "next/server";
 import { adminDb } from "../../../../../lib/firebase-admin";
 import { signedCharacterImageUrl } from "../../../../../lib/s3-images";
@@ -38,6 +40,7 @@ export async function GET(request: Request) {
   try {
     const player = await contributionPlayer(request);
     const url = new URL(request.url);
+    if (isDevCharacterWriter()) return NextResponse.json(await listCreatorCharacters(player.id, url), { headers: contributionHeaders });
     const requestedLimit = Number(url.searchParams.get("limit")) || 20;
     const limit = Math.min(50, Math.max(1, Math.floor(requestedLimit)));
     const collection = adminDb!.collection("characters");
@@ -108,6 +111,10 @@ export async function POST(request: Request) {
       throw new ContributionError(400);
     await limitContribution(player.id, "character-create", 10);
     if (fields.imageKey) await verifyPlayerCharacterImage(fields.imageKey);
+    if (isDevCharacterWriter()) {
+      await createCreatorCharacter(player.id, body.submissionId, fields);
+      return NextResponse.json({ id: body.submissionId }, { status: 201, headers: contributionHeaders });
+    }
     const ref = adminDb!.collection("characters").doc(body.submissionId);
     await adminDb!.runTransaction(async (transaction) => {
       const existing = await transaction.get(ref);

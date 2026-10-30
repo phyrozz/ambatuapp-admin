@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isDevCharacterWriter } from '../../../../../lib/dev-content-db';
+import { characterInsights } from '../../../../../lib/dev-characters';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { contributionError, contributionHeaders, contributionPlayer } from '../../../../../lib/community-content';
 
@@ -15,10 +17,12 @@ function count(value: unknown) {
 export async function GET(request: Request) {
   try {
     const player = await contributionPlayer(request);
-    const [lores, characters, sounds] = await Promise.all([
+    const usePostgresCharacters = isDevCharacterWriter();
+    const [lores, characters, sounds, postgresCharacters] = await Promise.all([
       adminDb!.collection('lores').where('uploaderId', '==', player.id).get(),
-      adminDb!.collection('characters').where('uploaderId', '==', player.id).get(),
+      usePostgresCharacters ? Promise.resolve(null) : adminDb!.collection('characters').where('uploaderId', '==', player.id).get(),
       adminDb!.collection('soundboardSounds').where('uploaderId', '==', player.id).get(),
+      usePostgresCharacters ? characterInsights(player.id) : Promise.resolve(null),
     ]);
 
     const insights = {
@@ -44,12 +48,17 @@ export async function GET(request: Request) {
       insights.downvotes += count(data.downvotes);
       insights.comments += count(data.commentCount);
     }
-    for (const doc of characters.docs) {
+    for (const doc of characters?.docs ?? []) {
       const data = doc.data();
       if (data.source !== 'revamp') continue;
       if (data.status === 'Draft') insights.drafts += 1;
       else insights.published += 1;
       insights.characterViews += count(data.viewCount);
+    }
+    if (postgresCharacters) {
+      insights.drafts += postgresCharacters.drafts;
+      insights.published += postgresCharacters.published;
+      insights.characterViews += postgresCharacters.views;
     }
     for (const doc of sounds.docs) {
       const data = doc.data();

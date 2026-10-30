@@ -8,10 +8,10 @@ import ts from 'typescript';
 const require = createRequire(import.meta.url);
 function load(relative, mocks = {}) {
   const filename = new URL(relative, import.meta.url);
-  const module = { exports: {} };
+  const evaluatedModule = { exports: {} };
   const code = ts.transpileModule(readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  vm.runInNewContext(code, { module, exports: module.exports, require: name => mocks[name] ?? require(name), Buffer, crypto, URL, Response, Request, process }, { filename: filename.pathname });
-  return module.exports;
+  vm.runInNewContext(code, { module: evaluatedModule, exports: evaluatedModule.exports, require: name => mocks[name] ?? require(name), Buffer, crypto, URL, Response, Request, process }, { filename: filename.pathname });
+  return evaluatedModule.exports;
 }
 const images = load('./s3-images.ts');
 class ContributionError extends Error { constructor(status) { super(); this.status = status; } }
@@ -68,6 +68,8 @@ function fixture() {
     'next/server':{ NextResponse: class extends Response { static json = Response.json; } },
     'firebase-admin/firestore':{ FieldPath:{ documentId:() => '__name__' }, FieldValue:{ serverTimestamp:() => null } },
     [`${prefix}/firebase-admin`]:{ adminDb:db },
+    [`${prefix}/dev-content-db`]:{ isDevCharacterWriter:() => false },
+    [`${prefix}/dev-characters`]:{},
     [`${prefix}/community-content`]:common,
     [`${prefix}/player-character`]:fields,
     [`${prefix}/s3-images`]:{ signedCharacterImageUrl:async () => null, verifyPlayerCharacterImage:async key => { verifiedImages.push(key); if(key.endsWith('/missing.jpg')) throw new Error('missing'); } },

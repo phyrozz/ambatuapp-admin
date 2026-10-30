@@ -79,7 +79,7 @@ function fixture() {
     const filename = `../app/api/public/${path}/route.ts`;
     const imports = [...readFileSync(new URL(filename, import.meta.url), 'utf8').matchAll(/from ['"]([^'"]+)['"]/g)].map(match => match[1]);
     const mocks = { 'next/server': { NextResponse }, 'firebase-admin/firestore': { FieldPath: { documentId: () => '__name__' }, FieldValue: { serverTimestamp: () => null, increment: value => value } } };
-    const libraries = { 'firebase-admin': { adminDb: db }, 'community-content': common, 'community-contribution-validation': validation, lore: { LORE_TEXT_LIMIT: 200000, validateLoreTranslations: () => {} }, 's3-images': images, 'admin-sounds': sounds, 's3-sounds': storage, 'player-auth': auth, 'public-write-limits': { allowPlayerWrite: async () => true }, 'player-profiles': { playerDisplayProfiles: async () => new Map() } };
+    const libraries = { 'firebase-admin': { adminDb: db }, 'dev-content-db': { isDevContentSnapshot: () => false, isDevCharacterWriter: () => false }, 'dev-content-read': {}, 'dev-characters': {}, 'community-content': common, 'community-contribution-validation': validation, lore: { LORE_TEXT_LIMIT: 200000, validateLoreTranslations: () => {} }, 's3-images': images, 'admin-sounds': sounds, 's3-sounds': storage, 'player-auth': auth, 'public-write-limits': { allowPlayerWrite: async () => true }, 'player-profiles': { playerDisplayProfiles: async () => new Map() } };
     for (const name of imports) { const library = name.split('/').at(-1); if (libraries[library]) mocks[name] = libraries[library]; }
     return load(filename, mocks);
   }
@@ -104,7 +104,7 @@ for (const kind of ['lores', 'sounds']) {
     assert.equal((await route(`${kind}/[id]`).GET(request(), params(id))).status, 404);
     if (kind === 'sounds') {
       assert.equal((await route('sounds/[id]/audio').GET(request(), params(id))).status, 404);
-      assert.equal((await route('sounds/[id]/plays').POST(request('POST'), params(id))).status, 404);
+      assert.equal((await route('sounds/[id]/plays').POST(request('POST', { visitorId: owner }), params(id))).status, 404);
     }
     assert.equal((await edit.PATCH(request('PATCH', body), params(id))).status, 200);
     assert.equal(map.get(id).status, 'Draft', 'omitting status must preserve drafts');

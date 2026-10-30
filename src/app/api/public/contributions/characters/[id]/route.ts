@@ -1,4 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
+import { isDevCharacterWriter } from "../../../../../../lib/dev-content-db";
+import { editCreatorCharacter } from "../../../../../../lib/dev-characters";
 import { NextResponse } from "next/server";
 import { adminDb } from "../../../../../../lib/firebase-admin";
 import {
@@ -26,6 +28,10 @@ export async function PATCH(
     if (!/^[a-f0-9-]{36}$/i.test(id)) throw new ContributionError(400);
     const body = await contributionBody(request);
     await limitContribution(player.id, "character-edit", 40);
+    if (isDevCharacterWriter()) {
+      await editCreatorCharacter(player.id, id, body);
+      return NextResponse.json({ id }, { headers: contributionHeaders });
+    }
     const ref = adminDb!.collection("characters").doc(id);
     await adminDb!.runTransaction(async (transaction) => {
       const existing = await transaction.get(ref);
