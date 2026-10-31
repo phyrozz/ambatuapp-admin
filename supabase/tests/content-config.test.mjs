@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isDevCharacterWriter, isDevContentSnapshot, isDevLoreWriter, isDevSoundWriter, isDevVideoWriter, isDevSocialWriter, isDevProfileWriter, isDevLeaderboardWriter, isDevRateLimitWriter } from '../../src/lib/dev-content-db.ts';
+import { isDevCharacterWriter, isDevContentSnapshot, isDevLoreWriter, isDevSoundWriter, isDevVideoWriter, isDevSocialWriter, isDevProfileWriter, isDevLeaderboardWriter, isDevRateLimitWriter, isDevStudioWriter } from '../../src/lib/dev-content-db.ts';
 
 test('the snapshot backend is opt-in and restricted to the Firebase dev project and Next development mode', () => {
   const previous = { ...process.env };
@@ -14,6 +14,7 @@ test('the snapshot backend is opt-in and restricted to the Firebase dev project 
     delete process.env.PROFILE_WRITE_BACKEND;
     delete process.env.LEADERBOARD_WRITE_BACKEND;
     delete process.env.RATE_LIMIT_BACKEND;
+    delete process.env.STUDIO_ACCESS_BACKEND;
     assert.equal(isDevContentSnapshot(), false);
     assert.equal(isDevCharacterWriter(), false);
     assert.equal(isDevLoreWriter(), false);
@@ -23,6 +24,7 @@ test('the snapshot backend is opt-in and restricted to the Firebase dev project 
     assert.equal(isDevProfileWriter(), false);
     assert.equal(isDevLeaderboardWriter(), false);
     assert.equal(isDevRateLimitWriter(), false);
+    assert.equal(isDevStudioWriter(), false);
     process.env.CHARACTER_WRITE_BACKEND = 'postgres-dev';
     process.env.LORE_WRITE_BACKEND = 'postgres-dev';
     process.env.SOUND_WRITE_BACKEND = 'postgres-dev';
@@ -31,6 +33,7 @@ test('the snapshot backend is opt-in and restricted to the Firebase dev project 
     process.env.PROFILE_WRITE_BACKEND = 'postgres-dev';
     process.env.LEADERBOARD_WRITE_BACKEND = 'postgres-dev';
     process.env.RATE_LIMIT_BACKEND = 'postgres-dev';
+    process.env.STUDIO_ACCESS_BACKEND = 'postgres-dev';
     assert.throws(isDevCharacterWriter);
     assert.throws(isDevLoreWriter);
     assert.throws(isDevSoundWriter);
@@ -39,6 +42,7 @@ test('the snapshot backend is opt-in and restricted to the Firebase dev project 
     assert.throws(isDevProfileWriter);
     assert.throws(isDevLeaderboardWriter);
     assert.throws(isDevRateLimitWriter);
+    assert.throws(isDevStudioWriter);
     process.env.CONTENT_READ_BACKEND = 'postgres-dev-snapshot';
     process.env.NODE_ENV = 'development';
     process.env.FIREBASE_PROJECT_ID = 'ambatuapp-dev';
@@ -51,6 +55,7 @@ test('the snapshot backend is opt-in and restricted to the Firebase dev project 
     assert.equal(isDevProfileWriter(), true);
     assert.equal(isDevLeaderboardWriter(), true);
     assert.equal(isDevRateLimitWriter(), true);
+    assert.equal(isDevStudioWriter(), true);
     delete process.env.SOCIAL_WRITE_BACKEND;
     assert.throws(isDevProfileWriter);
     process.env.SOCIAL_WRITE_BACKEND = 'postgres-dev';
@@ -67,10 +72,11 @@ test('the snapshot backend is opt-in and restricted to the Firebase dev project 
     assert.throws(isDevProfileWriter);
     assert.throws(isDevLeaderboardWriter);
     assert.throws(isDevRateLimitWriter);
+    assert.throws(isDevStudioWriter);
     process.env.CONTENT_READ_BACKEND = 'unexpected';
     assert.throws(isDevContentSnapshot);
   } finally {
-    for (const key of ['CONTENT_READ_BACKEND', 'CHARACTER_WRITE_BACKEND', 'LORE_WRITE_BACKEND', 'SOUND_WRITE_BACKEND', 'VIDEO_WRITE_BACKEND', 'SOCIAL_WRITE_BACKEND', 'PROFILE_WRITE_BACKEND', 'LEADERBOARD_WRITE_BACKEND', 'RATE_LIMIT_BACKEND', 'NODE_ENV', 'FIREBASE_PROJECT_ID']) {
+    for (const key of ['CONTENT_READ_BACKEND', 'CHARACTER_WRITE_BACKEND', 'LORE_WRITE_BACKEND', 'SOUND_WRITE_BACKEND', 'VIDEO_WRITE_BACKEND', 'SOCIAL_WRITE_BACKEND', 'PROFILE_WRITE_BACKEND', 'LEADERBOARD_WRITE_BACKEND', 'RATE_LIMIT_BACKEND', 'STUDIO_ACCESS_BACKEND', 'NODE_ENV', 'FIREBASE_PROJECT_ID']) {
       if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key];
     }
   }

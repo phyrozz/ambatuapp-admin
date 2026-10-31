@@ -38,7 +38,7 @@ function store() {
     },
   };
   const exports = {};
-  vm.runInNewContext(compiled, { exports, require: name => name === './firebase-admin' ? { adminDb: db } : name === './studio-policy.mjs' ? policy : name === 'firebase-admin/firestore' ? { FieldPath: { documentId: () => '__name__' }, FieldValue: { increment: value => ({ increment: value }), serverTimestamp: () => 'timestamp' } } : require(name) });
+  vm.runInNewContext(compiled, { exports, require: name => name === './firebase-admin' ? { adminDb: db } : name === './dev-content-db' ? { isDevStudioWriter: () => false } : name === './dev-studio' ? {} : name === './studio-policy.mjs' ? policy : name === 'firebase-admin/firestore' ? { FieldPath: { documentId: () => '__name__' }, FieldValue: { increment: value => ({ increment: value }), serverTimestamp: () => 'timestamp' } } : require(name) });
   return { rows, writes, api: exports };
 }
 test('Assignments update role counts and assigned roles cannot be deleted', async () => {

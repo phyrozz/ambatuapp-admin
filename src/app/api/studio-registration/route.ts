@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireStudioIdentity } from '../../../lib/api-auth';
 import { addStudioMembership, isCurrentAdmin } from '../../../lib/cognito-admins';
-import { completeStudioRegistration, findStudioRoleId, saveStudioUser, studioDb } from '../../../lib/studio-access';
+import { completeStudioRegistration, findStudioRoleId, readStudioUser, saveStudioUser } from '../../../lib/studio-access';
 import { studioError } from '../../../lib/studio-api';
 import { validateProfile } from '../../../lib/studio-policy.mjs';
 export const runtime = 'nodejs';
@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     const identity = await requireStudioIdentity(request);
     if (!identity || !identity.emailVerified || !identity.email) throw new Error('studio.errors.verifyEmail');
     const profile = validateProfile(await request.json());
-    const existing = (await studioDb().collection('studioUsers').doc(identity.sub).get()).data();
+    const existing = await readStudioUser(identity.sub);
     if (existing && !existing.enabled) throw new Error('studio.errors.forbidden');
     // Registration must not restore group access deliberately revoked from an existing user.
     if (existing && existing.registrationPending !== true) {

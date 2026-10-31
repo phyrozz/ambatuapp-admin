@@ -1,12 +1,24 @@
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from './firebase-admin';
 import { normalizePermissions, rootPermissions, type StudioRole, type StudioUser } from './studio-policy.mjs';
+import { isDevStudioWriter } from './dev-content-db';
+import { completeRegistration, deleteRoleDb, findRole, getAccess, getStudioUser, listRecords, saveRoleDb, saveUserDb, studioRoleExists } from './dev-studio';
+
+export async function readStudioUser(sub: string) {
+  if (isDevStudioWriter()) return getStudioUser(validId(sub));
+  return (await studioDb().collection('studioUsers').doc(validId(sub)).get()).data();
+}
+export async function hasStudioRole(id: string) {
+  if (isDevStudioWriter()) return studioRoleExists(validId(id));
+  return (await studioDb().collection('studioRoles').doc(validId(id)).get()).exists;
+}
 
 export function studioDb() {
   if (!adminDb) throw new Error('studio.errors.firestore');
   return adminDb;
 }
 export async function getStudioAccess(sub: string) {
+  if (isDevStudioWriter()) return getAccess(sub);
   const db = studioDb();
   const profile = (await db.collection('studioUsers').doc(sub).get()).data();
   if (!profile || profile.enabled !== true || profile.registrationPending === true) throw new Error('studio.errors.forbidden');
@@ -18,12 +30,14 @@ export function validId(value: unknown) {
   return value;
 }
 export async function findStudioRoleId(name: string) {
+  if (isDevStudioWriter()) return findRole(name);
   const snapshot = await studioDb().collection('studioRoles').where('name', '==', name).limit(1).get();
   const role = snapshot.docs[0];
   if (!role) throw new Error('studio.errors.roleMissing');
   return role.id;
 }
 export async function completeStudioRegistration(sub: string, roleId: string) {
+  if (isDevStudioWriter()) return completeRegistration(sub, roleId);
   const db = studioDb(), userRef = db.collection('studioUsers').doc(validId(sub));
   const newRoleId = validId(roleId);
   await db.runTransaction(async tx => {
@@ -44,6 +58,7 @@ export async function completeStudioRegistration(sub: string, roleId: string) {
   });
 }
 export async function listStudioRecords(collection: 'studioUsers' | 'studioRoles', cursor: string | null) {
+  if (isDevStudioWriter()) return listRecords(collection, cursor);
   const db = studioDb();
   let query = db.collection(collection).orderBy(FieldPath.documentId()).limit(31);
   if (cursor) query = query.startAfter(validId(cursor));
@@ -61,6 +76,7 @@ export async function listStudioRecords(collection: 'studioUsers' | 'studioRoles
   };
 }
 export async function saveRole(body: Record<string, unknown>, id?: string) {
+  if (isDevStudioWriter()) return saveRoleDb(body, id);
   const db = studioDb();
   if (id === 'root') throw new Error('studio.errors.rootProtected');
   const name = typeof body.name === 'string' ? body.name.trim() : '';
@@ -76,6 +92,7 @@ export async function saveRole(body: Record<string, unknown>, id?: string) {
   return { id: ref.id, name, description, permissions };
 }
 export async function deleteRole(id: string) {
+  if (isDevStudioWriter()) return deleteRoleDb(id);
   if (id === 'root') throw new Error('studio.errors.rootProtected');
   const db = studioDb(), ref = db.collection('studioRoles').doc(validId(id));
   await db.runTransaction(async tx => {
@@ -87,6 +104,7 @@ export async function deleteRole(id: string) {
 }
 // Counts and assignments share a transaction so assigned roles cannot be deleted.
 export async function saveStudioUser(sub: string, patch: Partial<StudioUser>, actor?: { sub: string; roleId: string | null }, creating = false) {
+  if (isDevStudioWriter()) return saveUserDb(sub, patch, actor, creating);
   const db = studioDb(), ref = db.collection('studioUsers').doc(validId(sub));
   await db.runTransaction(async tx => {
     const snapshot = await tx.get(ref), prior = snapshot.data();

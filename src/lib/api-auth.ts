@@ -1,6 +1,7 @@
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { isCurrentAdmin } from './cognito-admins';
 import { getStudioAccess } from './studio-access';
+import { isDevStudioWriter } from './dev-content-db';
 import { canAccess, permissionForRequest, type ModuleId, type RoleType } from './studio-policy.mjs';
 
 export type AdminIdentity = { sub: string; username: string };
@@ -24,7 +25,10 @@ export async function requireStudioIdentity(request: Request) {
 
 export async function requireAdmin(request: Request, permission?: { module: ModuleId; action: RoleType }) {
   const identity = await requireStudioIdentity(request);
-  if (!identity) return; // Unconfigured development preview only.
+  if (!identity) {
+    if (isDevStudioWriter()) throw new Error('studio.errors.authConfiguration');
+    return; // Unconfigured development preview only.
+  }
   if (!await isCurrentAdmin(identity.username)) throw new Error('studio.errors.forbidden');
   const access = await getStudioAccess(identity.sub);
   const required = permission ?? permissionForRequest(new URL(request.url).pathname, request.method);

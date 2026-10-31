@@ -9,6 +9,8 @@ async function load(path, dependencies) {
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports = {};
   vm.runInNewContext(compiled, { exports, require: name => {
+    if (name.endsWith('/dev-content-db')) return { isDevProfileWriter: () => false };
+    if (name.endsWith('/dev-profiles')) return {};
     const found = Object.entries(dependencies).find(([suffix]) => name.endsWith(suffix));
     if (!found) throw new Error(`Unexpected dependency: ${name}`);
     return found[1];

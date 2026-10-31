@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../../lib/api-auth';
 import { removeAdminUser } from '../../../../lib/cognito-admins';
-import { saveStudioUser, studioDb, validId } from '../../../../lib/studio-access';
+import { readStudioUser, saveStudioUser, validId } from '../../../../lib/studio-access';
 import { studioError } from '../../../../lib/studio-api';
 import { validateProfile } from '../../../../lib/studio-policy.mjs';
 type Context = { params: Promise<{ id: string }> };
@@ -17,9 +17,9 @@ export async function PATCH(request: Request, context: Context) {
 export async function DELETE(request: Request, context: Context) {
   try {
     const actor = await requireAdmin(request), sub = validId((await context.params).id);
-    const target = (await studioDb().collection('studioUsers').doc(sub).get()).data();
+    const target = await readStudioUser(sub);
     if (!target) throw new Error('studio.errors.userMissing');
-    // Disable Firestore access first; even a stale Cognito token then loses access.
+    // Disable Studio access first; even a stale Cognito token then loses access.
     await saveStudioUser(sub, { enabled: false, roleId: null }, actor);
     await removeAdminUser(target.username);
     return NextResponse.json({ removed: true });

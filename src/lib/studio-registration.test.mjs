@@ -9,12 +9,11 @@ const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.Modu
 function registration({ existing, verified = true, member = true, failMembership = false } = {}) {
   let row = existing, memberships = 0, saves = 0;
   const exports = {};
-  const db = { collection: () => ({ doc: () => ({ get: async () => ({ data: () => row }), update: async patch => { row = { ...row, ...patch }; } }) }) };
   vm.runInNewContext(compiled, { exports, require: name => {
     if (name === 'next/server') return { NextResponse: { json: (body, init) => Response.json(body, init) } };
     if (name.endsWith('/api-auth')) return { requireStudioIdentity: async () => ({ sub: 'new-user', username: 'user', email: 'user@example.com', emailVerified: verified }) };
     if (name.endsWith('/cognito-admins')) return { isCurrentAdmin: async () => member, addStudioMembership: async () => { memberships++; if (failMembership) throw new Error('studio.errors.request'); } };
-    if (name.endsWith('/studio-access')) return { studioDb: () => db, saveStudioUser: async (_sub, value, _actor, creating) => { assert.equal(creating, true); saves++; row = value; } };
+    if (name.endsWith('/studio-access')) return { readStudioUser: async () => row, findStudioRoleId: async () => 'creator', completeStudioRegistration: async () => { row = { ...row, roleId: 'creator', registrationPending: false }; }, saveStudioUser: async (_sub, value, _actor, creating) => { assert.equal(creating, true); saves++; row = value; } };
     if (name.endsWith('/studio-api')) return { studioError: error => Response.json({ error: error.message }, { status: 400 }) };
     if (name.endsWith('/studio-policy.mjs')) return policy;
     throw new Error(`Unexpected dependency ${name}`);
@@ -29,7 +28,7 @@ test('Registration requires verified email and drops client-supplied roles, perm
   assert.equal(unverified.saves(), 0); assert.equal(unverified.memberships(), 0);
   const valid = registration();
   assert.equal((await valid.api.POST(request())).status, 200);
-  assert.equal(valid.row().roleId, null); assert.equal(valid.row().registrationPending, false);
+  assert.equal(valid.row().roleId, 'creator'); assert.equal(valid.row().registrationPending, false);
   assert.equal(valid.row().permissions, undefined); assert.equal(valid.row().password, undefined);
   assert.equal(valid.memberships(), 1);
 });
@@ -52,5 +51,5 @@ test('Interrupted membership provisioning can retry without granting a role', as
   assert.equal(failed.row().registrationPending, true); assert.equal(failed.row().roleId, null);
   const retry = registration({ existing: failed.row() });
   assert.equal((await retry.api.POST(request())).status, 200);
-  assert.equal(retry.row().registrationPending, false); assert.equal(retry.row().roleId, null); assert.equal(retry.saves(), 0);
+  assert.equal(retry.row().registrationPending, false); assert.equal(retry.row().roleId, 'creator'); assert.equal(retry.saves(), 0);
 });
