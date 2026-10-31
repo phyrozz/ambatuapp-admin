@@ -1,5 +1,11 @@
 # AmbatuApp Studio
 
+## Health check
+
+`GET /api/health` checks that the HTTP API responds and can read from its configured Firestore database. It returns HTTP 200 with `{"status":"ok","api":"ok","database":"ok"}` when the read succeeds, or HTTP 503 with `database` and `status` set to `unavailable` if Firestore is unconfigured or the read fails. Responses are not cached. The check reads `_health/check` without requiring the document to exist and incurs Firestore read usage. It does not check the separate chat service or other external services.
+
+Health checks are limited to 60 requests per minute across all callers per running server instance. Excess requests receive HTTP 429 and a `Retry-After` header without a Firestore read. The in-memory limit resets on restart and is not shared between instances; configure a shared rate limit at the hosting edge for a deployment-wide limit or abuse protection.
+
 ## Dashboard
 
 The Dashboard module shows the number of player profile documents, profiles created in the last seven days, and distinct signed-in players active in rolling 24-hour, 7-day, and 30-day windows. A player is counted as active when the updated app is open and visible. Activity is refreshed at most once every 15 minutes per player, and activity before this feature is deployed is unavailable. Profile totals are not Cognito user-pool totals; accounts that have not initialized a player profile are excluded. The new-profile count depends on profile `createdAt` values.
