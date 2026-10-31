@@ -34,8 +34,9 @@ test('score sync retains the best score under concurrent submissions', { skip: !
     await service.submitScore('ambatutap', player, 300);
     const after = (await admin.query("SELECT updated_at FROM app.leaderboard_entries WHERE game_id='ambatutap' AND player_id=$1", [player])).rows[0].updated_at;
     assert.equal(before.getTime(), after.getTime());
-    await service.submitScore('ambatutap', other, 999999);
-    const top = await service.topScores('ambatutap');
+    await service.submitScore('leaderboard-test-game', player, 300);
+    await service.submitScore('leaderboard-test-game', other, 999999);
+    const top = await service.topScores('leaderboard-test-game');
     assert.equal(top[0].player, other); assert.equal(top[0].score, 999999);
     const client = await reader.connect();
     try { await client.query('BEGIN'); await client.query('SET LOCAL ROLE ambatu_dev_leaderboard_writer');
