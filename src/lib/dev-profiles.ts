@@ -147,8 +147,18 @@ export async function removeCustomAvatar(id: string) {
   });
   await bestEffortDeleteProfileAvatar(key);
 }
-export async function dashboardCounts() {
-  return withDevProfileDb(async db => (await db.query(`SELECT count(*)::int AS registered,count(*) FILTER (WHERE created_at>=now()-interval '7 days')::int AS "newProfiles",
-    count(*) FILTER (WHERE last_active_at>=now()-interval '1 day')::int AS "activeDay",count(*) FILTER (WHERE last_active_at>=now()-interval '7 days')::int AS "activeWeek",
-    count(*) FILTER (WHERE last_active_at>=now()-interval '30 days')::int AS "activeMonth" FROM app.player_profiles`)).rows[0]);
+export async function dashboardCounts(now: number) {
+  const day = 24 * 60 * 60 * 1000;
+  const phOffset = 8 * 60 * 60 * 1000;
+  const today = Math.floor((now + phOffset) / day) * day - phOffset;
+  return withDevProfileDb(async db => {
+    const counts = (await db.query(`SELECT count(*)::int AS registered,count(*) FILTER (WHERE created_at >= $1::timestamptz - interval '7 days')::int AS "newProfiles",
+      count(*) FILTER (WHERE last_active_at >= $1::timestamptz - interval '1 day')::int AS "activeDay",count(*) FILTER (WHERE last_active_at >= $1::timestamptz - interval '7 days')::int AS "activeWeek",
+      count(*) FILTER (WHERE last_active_at >= $1::timestamptz - interval '30 days')::int AS "activeMonth" FROM app.player_profiles`, [new Date(now)])).rows[0];
+    const rows = (await db.query<{ date: string; count: number }>(`SELECT to_char(bucket AT TIME ZONE 'Asia/Manila', 'YYYY-MM-DD') AS date, count(p.created_at)::int AS count
+      FROM generate_series($1::timestamptz, $2::timestamptz, interval '24 hours') AS bucket
+      LEFT JOIN app.player_profiles p ON p.created_at >= bucket AND p.created_at < bucket + interval '24 hours'
+      GROUP BY bucket ORDER BY bucket`, [new Date(today - 14 * day), new Date(today - day)])).rows;
+    return { ...counts, registrationTrend: rows };
+  });
 }
