@@ -220,3 +220,12 @@ a.dashboard-content-row:hover{color:#b54b2b}
 .dashboard-popular-title small{display:block;color:#858792;font-size:11px;margin-top:3px}
 .dashboard-panel-subtitle{margin:7px 0 0}.dashboard-footnote{display:block;margin-top:14px}.dashboard-empty-label{margin-top:24px}.dashboard-insight-status{margin-top:16px}
 @media(max-width:760px){.dashboard-extra{grid-template-columns:1fr}}
+.dashboard-chart-wrap{margin-top:14px}
+.dashboard-chart-readout{display:flex;justify-content:space-between;gap:8px;align-items:baseline;min-height:20px;color:#727584;font-size:12px}
+.dashboard-chart-readout strong{color:#b54b2b;font-size:15px}
+.dashboard-chart-wrap .dashboard-chart{gap:0;margin-top:4px}
+.dashboard-chart button.dashboard-bar-column{padding:0 3px;border:0;background:transparent;cursor:pointer;position:relative}
+.dashboard-chart button.dashboard-bar-column:focus-visible{outline:2px solid #a74224;outline-offset:-2px;border-radius:4px}
+.dashboard-chart button.dashboard-bar-column:hover,.dashboard-chart button.dashboard-bar-column[aria-checked=true]{background:#f7eee9}
+.dashboard-chart button.dashboard-bar-column:hover .dashboard-bar,.dashboard-chart button.dashboard-bar-column[aria-checked=true] .dashboard-bar{background:#b54b2b}
+@media(max-width:480px){.dashboard-chart button.dashboard-bar-column{padding:0 2px}}

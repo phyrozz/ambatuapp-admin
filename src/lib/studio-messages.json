@@ -189,5 +189,7 @@
   "studio.dashboard.communityHelp": "Current comments and follows, grouped by creation date.",
   "studio.dashboard.moderation": "Moderation",
   "studio.dashboard.openReports": "Open chat reports",
-  "studio.dashboard.pendingAvatars": "Pending avatar reviews"
+  "studio.dashboard.pendingAvatars": "Pending avatar reviews",
+  "studio.dashboard.profilePoint": "{date}: {count} new profiles",
+  "studio.dashboard.contentPoint": "{date}: {count} new content items"
 }

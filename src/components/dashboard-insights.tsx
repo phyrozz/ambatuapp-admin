@@ -1,9 +1,10 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useI18n } from './studio-i18n';
 import { studioApi } from '../lib/studio-client';
+import { DashboardTrendChart } from './dashboard-trend-chart';
 
 type Kind = 'character' | 'lore' | 'video' | 'sound';
 type Counts = { kind: Kind; published: number; draft: number; other: number; trend: number[] };
@@ -29,10 +30,8 @@ export function DashboardInsights() {
   const content = data.content.filter((item): item is Counts => item !== null);
   const complete = data.content.every(Boolean) && data.content.length === 4;
   const trend = data.dates.map((date, i) => ({ date, count: content.reduce((sum, item) => sum + item.trend[i], 0) }));
-  const max = Math.max(1, ...trend.map(item => item.count));
   const previous = trend.slice(0, 7).reduce((sum, item) => sum + item.count, 0);
   const recent = trend.slice(7).reduce((sum, item) => sum + item.count, 0);
-  const dateLabel = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
   const top = data.top.flatMap(item => item ?? []).sort((a, b) => b.votes - a.votes).slice(0, 5);
   const partialTop = data.top.length !== 3 || data.top.some(item => item === null);
   const period = (value: Period | null) => value ? `${value.recent.toLocaleString()} / ${value.previous.toLocaleString()}` : t('studio.dashboard.unavailable');
@@ -71,19 +70,7 @@ export function DashboardInsights() {
           )}
         </div>
         {complete ? (
-          <>
-            <div className="dashboard-chart" role="img" aria-label={t('studio.dashboard.contentChartLabel', { values: trend.map(item => `${dateLabel(item.date)}: ${item.count}`).join(', ') })}>
-              {trend.map(item => (
-                <div className="dashboard-bar-column" key={item.date} title={`${dateLabel(item.date)}: ${item.count}`}>
-                  <div className="dashboard-bar" style={{ height: `${Math.max(item.count ? 4 : 1, item.count / max * 100)}%` }} />
-                </div>
-              ))}
-            </div>
-            <div className="dashboard-chart-axis">
-              <span>{trend[0] && dateLabel(trend[0].date)}</span>
-              <span>{trend.at(-1) && dateLabel(trend.at(-1)!.date)}</span>
-            </div>
-          </>
+          <DashboardTrendChart points={trend} label={t('studio.dashboard.contentTrend')} pointLabel="studio.dashboard.contentPoint" />
         ) : <p className="dashboard-empty-label">{t('studio.dashboard.unavailable')}</p>}
       </section>
       <section className="dashboard-panel">

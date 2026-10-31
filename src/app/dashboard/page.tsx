@@ -7,6 +7,7 @@ import { Notice, Spinner } from '../../components/admin-ui';
 import { useI18n } from '../../components/studio-i18n';
 import { studioApi } from '../../lib/studio-client';
 import { DashboardInsights } from '../../components/dashboard-insights';
+import { DashboardTrendChart } from '../../components/dashboard-trend-chart';
 
 type DashboardData = {
   registered: number;
@@ -67,9 +68,7 @@ function Dashboard() {
   const trend = data?.registrationTrend ?? [];
   const previousWeek = trend.slice(0, 7).reduce((sum, point) => sum + point.count, 0);
   const recentWeek = trend.slice(7).reduce((sum, point) => sum + point.count, 0);
-  const maxCount = Math.max(1, ...trend.map(point => point.count));
   const change = previousWeek ? Math.round(((recentWeek - previousWeek) / previousWeek) * 100) : null;
-  const dateLabel = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
   return (
     <>
@@ -114,17 +113,7 @@ function Dashboard() {
                   <small>{change === null ? t(previousWeek === 0 && recentWeek === 0 ? 'studio.dashboard.noChange' : 'studio.dashboard.noBaseline') : t('studio.dashboard.change', { change: `${change > 0 ? '+' : ''}${change}%` })}</small>
                 </div>
               </div>
-              <div className="dashboard-chart" role="img" aria-label={t('studio.dashboard.chartLabel', { values: trend.map(point => `${dateLabel(point.date)}: ${point.count}`).join(', ') })}>
-                {trend.map(point => (
-                  <div className="dashboard-bar-column" key={point.date} title={`${dateLabel(point.date)}: ${point.count.toLocaleString()}`}>
-                    <div className="dashboard-bar" style={{ height: `${Math.max(point.count ? 4 : 1, point.count / maxCount * 100)}%` }} />
-                  </div>
-                ))}
-              </div>
-              <div className="dashboard-chart-axis">
-                <span>{trend[0] && dateLabel(trend[0].date)}</span>
-                <span>{trend[trend.length - 1] && dateLabel(trend[trend.length - 1].date)}</span>
-              </div>
+              <DashboardTrendChart points={trend} label={t('studio.dashboard.registrationTrend')} pointLabel="studio.dashboard.profilePoint" />
             </section>
             <section className="dashboard-panel dashboard-engagement">
               <h2>{t('studio.dashboard.engagement')}</h2>
