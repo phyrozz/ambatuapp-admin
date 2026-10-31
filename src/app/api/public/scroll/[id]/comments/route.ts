@@ -17,7 +17,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   let player;
   try { player = await requirePlayer(request); } catch { return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers }); }
-  if (!adminDb) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
+  if (!adminDb && !isDevVideoWriter()) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
   const { id } = await params;
   const raw = new URL(request.url).searchParams.get('cursor');
   if (isDevVideoWriter()) {
@@ -37,7 +37,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     } catch { return NextResponse.json({ error: 'INVALID_CURSOR' }, { status: 400, headers }); }
   }
   try {
-    const video = await adminDb.collection('videos').doc(id).get();
+    const video = await adminDb!.collection('videos').doc(id).get();
     if (video.data()?.status !== 'Published') return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404, headers });
     let query = video.ref.collection('comments').orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc').limit(21);
     if (cursor) query = query.startAfter(new Timestamp(cursor.seconds, cursor.nanoseconds), cursor.id);

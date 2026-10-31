@@ -12,7 +12,7 @@ const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Head
 export function OPTIONS() { return new NextResponse(null, { headers }); }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!adminDb) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503, headers });
+  if (!adminDb && !isDevVideoWriter()) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503, headers });
   const { id } = await params;
   const url = new URL(request.url);
   let cursor;
@@ -28,7 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return result ? NextResponse.json(result, { headers }) : NextResponse.json({ error: 'Video not found.' }, { status: 404, headers });
     } catch { return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503, headers }); }
   }
-  const video = await adminDb.collection('videos').doc(id).get();
+  const video = await adminDb!.collection('videos').doc(id).get();
   if (!video.exists || video.data()?.status !== 'Published') return NextResponse.json({ error: 'Video not found.' }, { status: 404, headers });
   let query = video.ref.collection('comments').orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc').limit(limit + 1);
   if (cursor) query = query.startAfter(cursor.time === null ? null : new Timestamp(Math.floor(Date.parse(cursor.time) / 1000), Number(cursor.time.slice(20, -1).padEnd(9, '0'))), cursor.id);
@@ -71,7 +71,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   try {
-    if (!adminDb) throw new Error('Video service is not configured.');
+    if (!adminDb && !isDevVideoWriter()) throw new Error('Video service is not configured.');
     const { id } = await params;
     const { text, parentId } = await request.json();
     if (typeof text !== 'string' || !text.trim() || text.length > 1000) throw new Error('Invalid comment.');
@@ -81,7 +81,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       { key: 'hour', max: 30, windowMs: 60 * 60_000 },
     ])) return NextResponse.json({ error: 'RATE_LIMITED' }, { status: 429, headers });
     if (isDevVideoWriter()) return NextResponse.json(await createVideoComment(id, player, text, parentId ?? null), { status: 201, headers });
-    const video = adminDb.collection('videos').doc(id);
+    const video = adminDb!.collection('videos').doc(id);
     const data = (await video.get()).data();
     if (!data || data.status !== 'Published') throw new Error('Video not found.');
     const commentsRef = video.collection('comments');

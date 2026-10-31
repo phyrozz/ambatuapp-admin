@@ -2,9 +2,9 @@ import { FieldPath, FieldValue } from "firebase-admin/firestore";
 import { isDevLoreWriter } from "../../../../../lib/dev-content-db";
 import { createCreatorLore, listCreatorLores } from "../../../../../lib/dev-lores";
 import { NextResponse } from "next/server";
-import { adminDb } from "../../../../../lib/firebase-admin";
 import { signedCharacterImageUrl } from "../../../../../lib/s3-images";
 import {
+  requireContributionFirestore,
   ContributionError,
   contributionBody,
   contributionError,
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
     if (isDevLoreWriter()) return NextResponse.json(await listCreatorLores(player.id, url), { headers: contributionHeaders });
     const requestedLimit = Number(url.searchParams.get("limit")) || 20;
     const limit = Math.min(50, Math.max(1, Math.floor(requestedLimit)));
-    const collection = adminDb!.collection("lores");
+    const collection = requireContributionFirestore().collection("lores");
     const afterId = cursorId(url.searchParams.get("cursor"));
     let query = collection
       .where("uploaderId", "==", player.id)
@@ -173,8 +173,8 @@ export async function POST(request: Request) {
       await createCreatorLore(player.id, body.submissionId, { title, text, tags, translations, imageKeys }, status);
       return NextResponse.json({ id: body.submissionId }, { status: 201, headers: contributionHeaders });
     }
-    const ref = adminDb!.collection("lores").doc(body.submissionId);
-    await adminDb!.runTransaction(async (transaction) => {
+    const ref = requireContributionFirestore().collection("lores").doc(body.submissionId);
+    await requireContributionFirestore().runTransaction(async (transaction) => {
       const existing = await transaction.get(ref);
       if (existing.exists) {
         if (existing.data()?.uploaderId !== player.id)

@@ -31,7 +31,7 @@ export function OPTIONS() {
 
 export async function POST(request: Request) {
   try {
-    if (!adminDb) return json({ error: 'Leaderboard service is not configured.' }, 503);
+    if (!adminDb && !isDevLeaderboardWriter()) return json({ error: 'Leaderboard service is not configured.' }, 503);
     const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
     if (!token) return json({ error: 'Sign in to sync scores.' }, 401);
     const claims = await accessVerifier().verify(token);
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     if (isDevLeaderboardWriter()) return json({ scores: await syncScores(claims.sub, localScores) });
 
     const entries = gameIds.map((gameId) => adminDb!.collection('leaderboards').doc(gameId).collection('entries').doc(claims.sub));
-    const scores = await adminDb.runTransaction(async (transaction) => {
+    const scores = await adminDb!.runTransaction(async (transaction) => {
       const existing = await Promise.all(entries.map((entry) => transaction.get(entry)));
       const merged: Record<string, number> = {};
       for (let index = 0; index < gameIds.length; index++) {

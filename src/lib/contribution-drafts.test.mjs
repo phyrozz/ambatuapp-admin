@@ -65,7 +65,7 @@ function fixture() {
     }),
   };
   const auth = { requirePlayer: async request => { if (request.headers.get('authorization') !== 'owner') throw new Error('unauthorized'); return { id: owner }; }, playerFromRequest: async () => null };
-  const common = load('./community-content.ts', { 'next/server': { NextResponse }, './firebase-admin': { adminDb: db }, './player-auth': auth, './public-write-limits': { allowPlayerWrite: async () => true } });
+  const common = load('./community-content.ts', { 'next/server': { NextResponse }, './firebase-admin': { adminDb: db }, './player-auth': auth, './public-write-limits': { allowPlayerWrite: async () => true }, './dev-content-db': { isDevContentSnapshot: () => false, isDevRateLimitWriter: () => false } });
   const images = { signedCharacterImageUrl: async () => null, isPlayerLoreImageKey: () => true, verifyPlayerLoreImage: async () => {}, deleteCharacterImage: async () => {} };
   const validation = load('./community-contribution-validation.ts', { './community-content': common, './lore': { LORE_TEXT_LIMIT: 200000, validateLoreTranslations: () => {} }, './s3-images': images });
   const sounds = load('./admin-sounds.ts');

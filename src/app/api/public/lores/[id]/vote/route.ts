@@ -10,12 +10,12 @@ const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Head
 export function OPTIONS() { return new NextResponse(null, { headers }); }
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    if (!adminDb) throw new Error('Lore service is not configured.');
+    if (!adminDb && !isDevLoreWriter()) throw new Error('Lore service is not configured.');
     const player = await requirePlayer(request); const { id } = await params; const { value } = await request.json();
     if (![1, -1].includes(value)) throw new Error('Invalid vote.');
     if (isDevLoreWriter()) return NextResponse.json({ value: (await voteLore(id, player.id, value)).value }, { headers });
-    const lore = adminDb.collection('lores').doc(id), vote = lore.collection('votes').doc(player.id);
-    const result = await adminDb.runTransaction(async transaction => {
+    const lore = adminDb!.collection('lores').doc(id), vote = lore.collection('votes').doc(player.id);
+    const result = await adminDb!.runTransaction(async transaction => {
       const [loreSnapshot, voteSnapshot] = await Promise.all([transaction.get(lore), transaction.get(vote)]), data = loreSnapshot.data();
       if (!data || data.status !== 'Published') throw new Error('Lore not found.');
       const prior = voteSnapshot.data()?.value ?? 0, next = prior === value ? 0 : value;

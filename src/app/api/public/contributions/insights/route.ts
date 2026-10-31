@@ -3,8 +3,7 @@ import { isDevCharacterWriter, isDevLoreWriter, isDevSoundWriter } from '../../.
 import { soundInsights } from '../../../../../lib/dev-sounds';
 import { characterInsights } from '../../../../../lib/dev-characters';
 import { loreInsights } from '../../../../../lib/dev-lores';
-import { adminDb } from '../../../../../lib/firebase-admin';
-import { contributionError, contributionHeaders, contributionPlayer } from '../../../../../lib/community-content';
+import { requireContributionFirestore, contributionError, contributionHeaders, contributionPlayer } from '../../../../../lib/community-content';
 
 export const runtime = 'nodejs';
 
@@ -23,9 +22,9 @@ export async function GET(request: Request) {
     const usePostgresLores = isDevLoreWriter();
     const usePostgresSounds = isDevSoundWriter();
     const [lores, characters, sounds, postgresCharacters, postgresLores, postgresSounds] = await Promise.all([
-      usePostgresLores ? Promise.resolve(null) : adminDb!.collection('lores').where('uploaderId', '==', player.id).get(),
-      usePostgresCharacters ? Promise.resolve(null) : adminDb!.collection('characters').where('uploaderId', '==', player.id).get(),
-      usePostgresSounds ? Promise.resolve(null) : adminDb!.collection('soundboardSounds').where('uploaderId', '==', player.id).get(),
+      usePostgresLores ? Promise.resolve(null) : requireContributionFirestore().collection('lores').where('uploaderId', '==', player.id).get(),
+      usePostgresCharacters ? Promise.resolve(null) : requireContributionFirestore().collection('characters').where('uploaderId', '==', player.id).get(),
+      usePostgresSounds ? Promise.resolve(null) : requireContributionFirestore().collection('soundboardSounds').where('uploaderId', '==', player.id).get(),
       usePostgresCharacters ? characterInsights(player.id) : Promise.resolve(null),
       usePostgresLores ? loreInsights(player.id) : Promise.resolve(null),
       usePostgresSounds ? soundInsights(player.id) : Promise.resolve(null),

@@ -16,7 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   if (!validFriendId(id) || id === 'admin') return NextResponse.json({ error: 'PLAYER_NOT_FOUND' }, { status: 404, headers });
   const db = adminDb;
-  if (!db) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
+  if (!db && !(isDevVideoWriter())) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
   const own = id === player.id;
   const raw = new URL(request.url).searchParams.get('cursor');
   if (isDevVideoWriter()) {
@@ -32,7 +32,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     } catch { return NextResponse.json({ error: 'INVALID_CURSOR' }, { status: 400, headers }); }
   }
   try {
-    let query = db.collection('videos').where('uploaderId', '==', id);
+    let query = db!.collection('videos').where('uploaderId', '==', id);
     if (!own) query = query.where('status', '==', 'Published');
     query = query.orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc').limit(13);
     if (cursor) query = query.startAfter(new Timestamp(cursor.seconds, cursor.nanoseconds), cursor.id);

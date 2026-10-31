@@ -12,7 +12,7 @@ const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Head
 export function OPTIONS() { return new NextResponse(null, { headers }); }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!adminDb) return NextResponse.json({ error: 'Lore service is not configured.' }, { status: 503, headers });
+  if (!adminDb && !isDevLoreWriter()) return NextResponse.json({ error: 'Lore service is not configured.' }, { status: 503, headers });
   const { id } = await params;
   const url = new URL(request.url);
   let cursor;
@@ -30,7 +30,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return result ? NextResponse.json(result, { headers }) : NextResponse.json({ error: 'Lore not found.' }, { status: 404, headers });
     } catch { return NextResponse.json({ error: 'Lore service is not configured.' }, { status: 503, headers }); }
   }
-  const lore = await adminDb.collection('lores').doc(id).get();
+  const lore = await adminDb!.collection('lores').doc(id).get();
   if (!lore.exists || lore.data()?.status !== 'Published') return NextResponse.json({ error: 'Lore not found.' }, { status: 404, headers });
   let query = lore.ref.collection('comments').orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc').limit(limit + 1);
   if (cursor) {
@@ -68,14 +68,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    if (!adminDb) throw new Error('Lore service is not configured.');
+    if (!adminDb && !isDevLoreWriter()) throw new Error('Lore service is not configured.');
     const player = await requirePlayer(request);
     const { id } = await params;
     const { text, parentId } = await request.json();
     if (typeof text !== 'string' || !text.trim() || text.length > 1000) throw new Error('Invalid comment.');
     if (parentId !== undefined && (typeof parentId !== 'string' || !parentId.trim())) throw new Error('Invalid reply target.');
     if (isDevLoreWriter()) return NextResponse.json(await createLoreComment(id, player, text, parentId ?? null), { status: 201, headers });
-    const lore = adminDb.collection('lores').doc(id);
+    const lore = adminDb!.collection('lores').doc(id);
     const data = (await lore.get()).data();
     if (!data || data.status !== 'Published') throw new Error('Lore not found.');
     const commentsRef = lore.collection('comments');

@@ -12,7 +12,7 @@ export function OPTIONS() { return new NextResponse(null, { headers }); }
 export async function GET(request: Request) {
   let player;
   try { player = await requirePlayer(request); } catch { return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers }); }
-  if (!adminDb) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
+  if (!adminDb && !isDevVideoWriter()) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
   const raw = new URL(request.url).searchParams.get('cursor');
   if (isDevVideoWriter()) {
     try { return NextResponse.json(await listScrollVideos(player.id, raw), { headers }); }
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   }
   try {
     // Scan a bounded chronological batch. Filtering after the query avoids a new composite index.
-    let query = adminDb.collection('videos').orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc').limit(9);
+    let query = adminDb!.collection('videos').orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc').limit(9);
     if (cursor) query = query.startAfter(new Timestamp(cursor.seconds, cursor.nanoseconds), cursor.id);
     const snapshot = await query.get();
     const page = snapshot.docs.slice(0, 8);

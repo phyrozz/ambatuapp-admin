@@ -10,7 +10,7 @@ export type PlayerWriteLimit = {
 
 /** Enforce per-player write caps in one stable, server-only record. */
 export async function allowPlayerWrite(
-  db: Firestore,
+  db: Firestore | null,
   playerId: string,
   action: string,
   limits: PlayerWriteLimit[],
@@ -27,6 +27,7 @@ export async function allowPlayerWrite(
       return true;
     });
   }
+  if (!db) throw new Error('Rate limit service is not configured');
   const ref = db.collection('publicApiRateLimits').doc(playerKey);
 
   return db.runTransaction(async transaction => {

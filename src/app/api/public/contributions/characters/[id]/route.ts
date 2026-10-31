@@ -2,12 +2,12 @@ import { FieldValue } from "firebase-admin/firestore";
 import { isDevCharacterWriter } from "../../../../../../lib/dev-content-db";
 import { editCreatorCharacter } from "../../../../../../lib/dev-characters";
 import { NextResponse } from "next/server";
-import { adminDb } from "../../../../../../lib/firebase-admin";
 import {
   contributionBody,
   contributionError,
   contributionHeaders,
   contributionPlayer,
+  requireContributionFirestore,
   ContributionError,
   limitContribution,
 } from "../../../../../../lib/community-content";
@@ -32,8 +32,8 @@ export async function PATCH(
       await editCreatorCharacter(player.id, id, body);
       return NextResponse.json({ id }, { headers: contributionHeaders });
     }
-    const ref = adminDb!.collection("characters").doc(id);
-    await adminDb!.runTransaction(async (transaction) => {
+    const ref = requireContributionFirestore().collection("characters").doc(id);
+    await requireContributionFirestore().runTransaction(async (transaction) => {
       const existing = await transaction.get(ref);
       if (
         !existing.exists ||

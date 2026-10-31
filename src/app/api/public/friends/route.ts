@@ -16,7 +16,7 @@ export function OPTIONS() { return new NextResponse(null, { headers }); }
 export async function GET(request: Request) {
   let player;
   try { player = await requirePlayer(request); } catch { return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers }); }
-  if (!adminDb) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
+  if (!adminDb && !(isDevSocialWriter() && isDevProfileWriter())) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
   let filter: FriendFilter, cursor: string | null;
   try {
     const params = new URL(request.url).searchParams;
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
       const profiles = await playerDisplayProfiles(page.rows.map(row => row.other_player_id), new Map());
       return NextResponse.json({ friends: page.rows.map(row => ({ id: row.other_player_id, ...profiles.get(row.other_player_id), state: row.state, pinned: row.pinned })), nextCursor: page.nextCursor }, { headers });
     }
-    let query = adminDb.collection('playerProfiles').doc(player.id).collection('friends').orderBy(FieldPath.documentId()).limit(21);
+    let query = adminDb!.collection('playerProfiles').doc(player.id).collection('friends').orderBy(FieldPath.documentId()).limit(21);
     if (filter.pinned) query = query.where('pinned', '==', true);
     else if (filter.state) query = query.where('state', '==', filter.state);
     if (cursor) query = query.startAfter(cursor);
@@ -44,12 +44,12 @@ export async function POST(request: Request) {
   let player;
   try { player = await requirePlayer(request); } catch { return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers }); }
   const db = adminDb;
-  if (!db) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
+  if (!db && !(isDevSocialWriter() && isDevProfileWriter())) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
   try {
     const { targetId, action } = await request.json();
     if (!validFriendId(targetId) || targetId === player.id || !['request', 'accept', 'remove', 'pin', 'unpin'].includes(action)) return NextResponse.json({ error: 'INVALID_REQUEST' }, { status: 400, headers });
     if (isDevSocialWriter()) {
-      if (action !== 'remove' && !(isDevProfileWriter() ? await getProfilePublic(targetId) : (await db.collection('playerProfiles').doc(targetId).get()).exists)) throw new Error('PLAYER_NOT_FOUND');
+      if (action !== 'remove' && !(isDevProfileWriter() ? await getProfilePublic(targetId) : (await db!.collection('playerProfiles').doc(targetId).get()).exists)) throw new Error('PLAYER_NOT_FOUND');
       const result = await changeFriend(player.id, targetId, action);
       if (result.notify) {
         try { const sender = (await playerDisplayProfiles([player.id], new Map([[player.id, player.email]]))).get(player.id); await notifyFriendRequest(targetId, sender?.username ?? player.email.split('@')[0]); }
@@ -57,10 +57,10 @@ export async function POST(request: Request) {
       }
       return NextResponse.json({ state: result.state, pinned: result.pinned }, { headers });
     }
-    const own = db.collection('playerProfiles').doc(player.id).collection('friends').doc(targetId);
-    const other = db.collection('playerProfiles').doc(targetId).collection('friends').doc(player.id);
-    const result = await db.runTransaction(async tx => {
-      const [current, target] = await Promise.all([tx.get(own), tx.get(db.collection('playerProfiles').doc(targetId))]);
+    const own = db!.collection('playerProfiles').doc(player.id).collection('friends').doc(targetId);
+    const other = db!.collection('playerProfiles').doc(targetId).collection('friends').doc(player.id);
+    const result = await db!.runTransaction(async tx => {
+      const [current, target] = await Promise.all([tx.get(own), tx.get(db!.collection('playerProfiles').doc(targetId))]);
       if (!target.exists && action !== 'remove') throw new Error('PLAYER_NOT_FOUND');
       if (action === 'pin' || action === 'unpin') {
         if (current.data()?.state !== 'accepted') throw new Error('INVALID_FRIEND_TRANSITION');

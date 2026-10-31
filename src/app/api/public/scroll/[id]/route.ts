@@ -14,7 +14,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   let player;
   try { player = await requirePlayer(request); }
   catch { return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers }); }
-  if (!adminDb) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
+  if (!adminDb && !isDevVideoWriter()) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
 
   const { id } = await params;
   if (!/^[\w-]{1,128}$/.test(id)) return NextResponse.json({ error: 'VIDEO_NOT_FOUND' }, { status: 404, headers });
@@ -24,7 +24,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       const video = await getScrollVideo(player.id, id);
       return video ? NextResponse.json(video, { headers }) : NextResponse.json({ error: 'VIDEO_NOT_FOUND' }, { status: 404, headers });
     }
-    const snapshot = await adminDb.collection('videos').doc(id).get();
+    const snapshot = await adminDb!.collection('videos').doc(id).get();
     const data = snapshot.data();
     if (!data || data.status !== 'Published' || typeof data.videoKey !== 'string') {
       return NextResponse.json({ error: 'VIDEO_NOT_FOUND' }, { status: 404, headers });

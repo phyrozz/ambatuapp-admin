@@ -26,18 +26,18 @@ function validBirthDate(value: unknown): value is string {
 
 export async function GET(request: Request) {
   try {
-    if (!adminDb) throw new Error('Player profile service is not configured.');
+    if (!adminDb && !isDevProfileWriter()) throw new Error('Player profile service is not configured.');
     const player = await requirePlayer(request);
     if (isDevProfileWriter()) return json(await getProfile(player.id, player.email));
-    const data = (await adminDb.collection('playerProfiles').doc(player.id).get()).data();
-    const moderation = await adminDb.collection('profileAvatarModeration').doc(player.id).get();
+    const data = (await adminDb!.collection('playerProfiles').doc(player.id).get()).data();
+    const moderation = await adminDb!.collection('profileAvatarModeration').doc(player.id).get();
     return json({ username: typeof data?.username === 'string' ? data.username : fallbackPlayerName(player.email), birthDate: typeof data?.birthDate === 'string' ? data.birthDate : null, bio: typeof data?.bio === 'string' ? data.bio : '', avatarType: data?.avatarType ?? null, avatarId: data?.avatarId ?? null, avatarUrl: await profileAvatarUrl(typeof data?.avatarKey === 'string' ? data.avatarKey : undefined), avatarRemoved: moderation.data()?.status === 'removed' });
   } catch (error) { return json({ error: error instanceof Error ? error.message : 'Could not load profile.' }, 401); }
 }
 
 export async function PUT(request: Request) {
   try {
-    if (!adminDb) throw new Error('Player profile service is not configured.');
+    if (!adminDb && !isDevProfileWriter()) throw new Error('Player profile service is not configured.');
     const player = await requirePlayer(request);
     const { username, birthDate, bio } = await request.json();
     const cleanUsername = typeof username === 'string' ? username.normalize('NFKC').trim().replace(/\s+/g, ' ') : '';
@@ -49,14 +49,14 @@ export async function PUT(request: Request) {
       try { return json(await updateProfile(player.id, cleanUsername, birthDate ?? null, bio === undefined ? undefined : bio.trim(), player.emailVerified ? emailSearchKey(player.email) : null)); }
       catch (error) { if (error instanceof Error && error.message === 'USERNAME_TAKEN') throw new UsernameTakenError('Username is already taken.'); throw error; }
     }
-    const profiles = adminDb.collection('playerProfiles');
-    const claims = adminDb.collection('playerUsernameClaims');
+    const profiles = adminDb!.collection('playerProfiles');
+    const claims = adminDb!.collection('playerUsernameClaims');
     const matches = await profiles.where('usernameLower', '==', usernameLower).limit(2).get();
     if (matches.docs.some((doc) => doc.id !== player.id)) throw new UsernameTakenError('Username is already taken.');
     const profile = { username: cleanUsername, usernameLower, birthDate: birthDate ?? null, ...(bio === undefined ? {} : { bio: bio.trim() }), emailSearchHash: player.emailVerified ? emailSearchKey(player.email) : FieldValue.delete(), updatedAt: new Date() };
     const profileRef = profiles.doc(player.id);
     const requestedClaimRef = claims.doc(usernameLower);
-    await adminDb.runTransaction(async (transaction) => {
+    await adminDb!.runTransaction(async (transaction) => {
       const current = await transaction.get(profileRef);
       const requestedClaim = await transaction.get(requestedClaimRef);
       const previousUsername = current.data()?.username;

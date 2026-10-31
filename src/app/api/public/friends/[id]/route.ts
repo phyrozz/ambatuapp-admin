@@ -16,9 +16,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const { id } = await context.params;
   if (!validFriendId(id)) return NextResponse.json({ error: 'INVALID_REQUEST' }, { status: 400, headers });
   const db = adminDb;
-  if (!db) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
+  if (!db && !(isDevProfileWriter() && isDevSocialWriter())) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
   try {
-    const [target, relationship] = await Promise.all([isDevProfileWriter() ? getProfilePublic(id).then(Boolean) : db.collection('playerProfiles').doc(id).get().then(doc => doc.exists), isDevSocialWriter() ? friendRelationships(player.id, [id]).then(rows => rows.get(id)) : db.collection('playerProfiles').doc(player.id).collection('friends').doc(id).get().then(doc => doc.data())]);
+    const [target, relationship] = await Promise.all([isDevProfileWriter() ? getProfilePublic(id).then(Boolean) : db!.collection('playerProfiles').doc(id).get().then(doc => doc.exists), isDevSocialWriter() ? friendRelationships(player.id, [id]).then(rows => rows.get(id)) : db!.collection('playerProfiles').doc(player.id).collection('friends').doc(id).get().then(doc => doc.data())]);
     if (!target) return NextResponse.json({ error: 'PLAYER_NOT_FOUND' }, { status: 404, headers });
     const profile = (await playerDisplayProfiles([id], new Map())).get(id);
     return NextResponse.json({ friend: { id, ...profile, state: relationship?.state ?? null, pinned: relationship?.pinned === true } }, { headers });

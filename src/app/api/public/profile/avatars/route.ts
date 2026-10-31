@@ -11,9 +11,9 @@ export function OPTIONS() { return new NextResponse(null, { headers }); }
 export async function GET(request: Request) {
   try {
     await requirePlayer(request);
-    if (!adminDb) return NextResponse.json({ avatars: [] }, { headers });
+    if (!adminDb && !isDevProfileWriter()) return NextResponse.json({ avatars: [] }, { headers });
     if (isDevProfileWriter()) return NextResponse.json({ avatars: await listPresets(false) }, { headers });
-    const snapshot = await adminDb.collection('profileAvatars').orderBy('createdAt', 'desc').get();
+    const snapshot = await adminDb!.collection('profileAvatars').orderBy('createdAt', 'desc').get();
     const avatars = await Promise.all(snapshot.docs.map(async doc => ({ id: doc.id, name: doc.data().name ?? 'Dreamy avatar', imageUrl: await profileAvatarUrl(doc.data().imageKey) })));
     return NextResponse.json({ avatars }, { headers });
   } catch (error) {

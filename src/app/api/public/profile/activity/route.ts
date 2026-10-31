@@ -22,11 +22,11 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ ok: false }, { status: 401, headers });
   }
-  if (!adminDb) return NextResponse.json({ ok: false }, { status: 503, headers });
+  if (!adminDb && !isDevProfileWriter()) return NextResponse.json({ ok: false }, { status: 503, headers });
   try {
     if (isDevProfileWriter()) { await profileActivity(player.id); return NextResponse.json({ ok: true }, { headers }); }
-    const profile = adminDb.collection('playerProfiles').doc(player.id);
-    await adminDb.runTransaction(async transaction => {
+    const profile = adminDb!.collection('playerProfiles').doc(player.id);
+    await adminDb!.runTransaction(async transaction => {
       const snapshot = await transaction.get(profile);
       if (!snapshot.exists) return;
       const lastActive = snapshot.data()?.lastActiveAt?.toMillis?.();

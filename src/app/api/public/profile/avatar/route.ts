@@ -11,7 +11,7 @@ export function OPTIONS() { return new NextResponse(null, { headers }); }
 
 export async function POST(request: Request) {
   try {
-    if (!adminDb) return NextResponse.json({ error: 'Profile service is not configured.' }, { status: 503, headers });
+    if (!adminDb && !isDevProfileWriter()) return NextResponse.json({ error: 'Profile service is not configured.' }, { status: 503, headers });
     const player = await requirePlayer(request);
     const { avatarId } = await request.json() as { avatarId?: unknown };
     if (isDevProfileWriter()) {
@@ -19,14 +19,14 @@ export async function POST(request: Request) {
       await choosePreset(player.id, avatarId);
       return NextResponse.json({ avatarType: avatarId ? 'preset' : null, avatarId: avatarId ?? null }, { headers });
     }
-    const profileRef = adminDb.collection('playerProfiles').doc(player.id);
-    const moderationRef = adminDb.collection('profileAvatarModeration').doc(player.id);
+    const profileRef = adminDb!.collection('playerProfiles').doc(player.id);
+    const moderationRef = adminDb!.collection('profileAvatarModeration').doc(player.id);
     let presetRef: FirebaseFirestore.DocumentReference | null = null;
     if (avatarId !== null) {
       if (typeof avatarId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(avatarId)) return NextResponse.json({ error: 'Choose a valid avatar.' }, { status: 400, headers });
-      presetRef = adminDb.collection('profileAvatars').doc(avatarId);
+      presetRef = adminDb!.collection('profileAvatars').doc(avatarId);
     }
-    const removedKeys = await adminDb.runTransaction(async transaction => {
+    const removedKeys = await adminDb!.runTransaction(async transaction => {
       const [profileSnapshot, moderationSnapshot, presetSnapshot] = await Promise.all([
         transaction.get(profileRef), transaction.get(moderationRef), presetRef ? transaction.get(presetRef) : Promise.resolve(null),
       ]);

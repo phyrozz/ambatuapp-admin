@@ -12,7 +12,7 @@ export function OPTIONS() { return new NextResponse(null, { headers }); }
 export async function POST(request: Request) {
   let uploadedKey: string | undefined;
   try {
-    if (!adminDb) return NextResponse.json({ error: 'Profile service is not configured.' }, { status: 503, headers });
+    if (!adminDb && !isDevProfileWriter()) return NextResponse.json({ error: 'Profile service is not configured.' }, { status: 503, headers });
     const player = await requirePlayer(request);
     const form = await request.formData();
     const file = form.get('image');
@@ -23,8 +23,6 @@ export async function POST(request: Request) {
     const dimensions = readJpegDimensions(bytes);
     if (!dimensions || dimensions.width !== dimensions.height || dimensions.width > 512) return NextResponse.json({ error: 'The cropped image must be square and no larger than 512 pixels.' }, { status: 400, headers });
 
-    const profileRef = adminDb.collection('playerProfiles').doc(player.id);
-    const moderationRef = adminDb.collection('profileAvatarModeration').doc(player.id);
     const imageKey = newProfileAvatarKey('custom', 'jpg');
     uploadedKey = imageKey;
     await uploadProfileAvatar(imageKey, bytes, 'image/jpeg', 'private, no-store, max-age=0, must-revalidate');
@@ -33,7 +31,9 @@ export async function POST(request: Request) {
       uploadedKey = undefined;
       return NextResponse.json({ avatarType: 'custom', avatarUrl: await profileAvatarUrl(imageKey) }, { status: 200, headers });
     }
-    const previousKey = await adminDb.runTransaction(async transaction => {
+    const profileRef = adminDb!.collection('playerProfiles').doc(player.id);
+    const moderationRef = adminDb!.collection('profileAvatarModeration').doc(player.id);
+    const previousKey = await adminDb!.runTransaction(async transaction => {
       const profileSnapshot = await transaction.get(profileRef);
       const profile = profileSnapshot.data() ?? {};
       const oldKey = profile.avatarType === 'custom' && typeof profile.avatarKey === 'string' ? profile.avatarKey : undefined;

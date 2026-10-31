@@ -15,11 +15,11 @@ export const runtime = 'nodejs';
 export async function GET(request: Request) {
   try {
     const actor = await requireAdmin(request);
-    if (!adminDb) return NextResponse.json({ error: 'Sound catalog is not configured.' }, { status: 503 });
+    if (!adminDb && !isDevSoundWriter()) return NextResponse.json({ error: 'Sound catalog is not configured.' }, { status: 503 });
     if (isDevSoundWriter()) return NextResponse.json(await listStudioSounds(actor, new URL(request.url)));
     const filter = characterListFilter(new URL(request.url), isStudioRoot(actor) ? null : actor!.sub);
     const cursor = parseCharacterListCursor(new URL(request.url).searchParams.get('cursor'), filter);
-    let query = filter.owner ? adminDb.collection('soundboardSounds').where('createdBy', '==', filter.owner) : adminDb.collection('soundboardSounds');
+    let query = filter.owner ? adminDb!.collection('soundboardSounds').where('createdBy', '==', filter.owner) : adminDb!.collection('soundboardSounds');
     query = query.orderBy(FieldPath.documentId()).limit(filter.limit + 1);
     if (cursor) query = query.startAfter(cursor);
     const snapshot = await query.get();
@@ -35,13 +35,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const actor = await requireAdmin(request);
-    if (!adminDb) return NextResponse.json({ error: 'Sound catalog is not configured.' }, { status: 503 });
+    if (!adminDb && !isDevSoundWriter()) return NextResponse.json({ error: 'Sound catalog is not configured.' }, { status: 503 });
     const body = await request.json() as Record<string, unknown>;
     const fields = soundFields(body);
     const soundKey = adminSoundUploadKey(body.soundKey, studioContentOwner(actor));
     await verifySoundUpload(soundKey);
     if (isDevSoundWriter()) return NextResponse.json(await createStudioSound(actor, fields, soundKey, body.color, new URL(request.url).origin), { status: 201 });
-    const collection = adminDb.collection('soundboardSounds');
+    const collection = adminDb!.collection('soundboardSounds');
     const existing = await collection.get();
     const color = soundColor(body.color, existing.size);
     const ref = collection.doc(crypto.randomUUID());

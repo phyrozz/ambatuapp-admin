@@ -14,12 +14,12 @@ export async function GET(request: Request) {
   try {
     const actor = await requireAdmin(request);
     if (isDevCharacterWriter()) return NextResponse.json(await listStudioCharacters(actor, new URL(request.url)));
-    if (!adminDb) return NextResponse.json({ configured: false, characters: [] });
+    if (!adminDb && !isDevCharacterWriter()) return NextResponse.json({ configured: false, characters: [] });
     const filter = characterListFilter(new URL(request.url), isStudioRoot(actor) ? null : actor!.sub);
     let after = parseCharacterListCursor(new URL(request.url).searchParams.get('cursor'), filter);
     const matches: FirebaseFirestore.QueryDocumentSnapshot[] = [];
     while (matches.length <= filter.limit) {
-      let query: FirebaseFirestore.Query = adminDb.collection('characters');
+      let query: FirebaseFirestore.Query = adminDb!.collection('characters');
       if (filter.owner) query = query.where('createdBy', '==', filter.owner);
       query = query.orderBy(FieldPath.documentId()).limit(filter.limit + 1);
       if (after) query = query.startAfter(after);
@@ -43,13 +43,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const actor = await requireAdmin(request);
-    if (!adminDb) return NextResponse.json({ error: 'Firestore is not configured.' }, { status: 503 });
+    if (!adminDb && !isDevCharacterWriter()) return NextResponse.json({ error: 'Firestore is not configured.' }, { status: 503 });
     const body = await request.json();
     if (isDevCharacterWriter()) return NextResponse.json(await createStudioCharacter(actor, body), { status: 201 });
     const imageKey = typeof body.imageKey === 'string' ? body.imageKey : null;
     if (actor && actor.roleId !== 'root' && imageKey && !imageKey.startsWith(`characters/${actor.sub}/`)) throw new Error('studio.errors.forbidden');
     const stored = { name: body.name, title: body.title, bio: body.bio ?? '', status: body.status ?? 'Draft', tags: body.tags ?? [], imageKey, ...(actor ? { createdBy: actor.sub } : {}), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), updated: 'Just now' };
-    const ref = await adminDb.collection('characters').add(stored);
+    const ref = await adminDb!.collection('characters').add(stored);
     const { createdBy: _createdBy, ...visible } = stored;
     return NextResponse.json({ id: ref.id, ...visible, createdAt: null, updatedAt: null, imageUrl: await signedCharacterImageUrl(imageKey ?? undefined), updated: 'Just now' }, { status: 201 });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Request failed' }, { status: adminErrorStatus(error, 400) }); }

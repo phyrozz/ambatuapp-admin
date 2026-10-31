@@ -11,16 +11,16 @@ export function OPTIONS() { return new NextResponse(null, { headers }); }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string; commentId: string }> }) {
   try {
-    if (!adminDb) throw new Error('Lore service is not configured.');
+    if (!adminDb && !isDevLoreWriter()) throw new Error('Lore service is not configured.');
     const player = await requirePlayer(request);
     const { id, commentId } = await params;
     const { value } = await request.json();
     if (![1, -1].includes(value)) throw new Error('Invalid vote.');
     if (isDevLoreWriter()) return NextResponse.json(await voteLore(id, player.id, value, commentId), { headers });
-    const lore = adminDb.collection('lores').doc(id);
+    const lore = adminDb!.collection('lores').doc(id);
     const comment = lore.collection('comments').doc(commentId);
     const vote = comment.collection('votes').doc(player.id);
-    const result = await adminDb.runTransaction(async transaction => {
+    const result = await adminDb!.runTransaction(async transaction => {
       const [loreSnapshot, commentSnapshot, voteSnapshot] = await Promise.all([transaction.get(lore), transaction.get(comment), transaction.get(vote)]);
       if (loreSnapshot.data()?.status !== 'Published') throw new Error('Lore not found.');
       const commentData = commentSnapshot.data();

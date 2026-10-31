@@ -12,10 +12,10 @@ export const runtime = 'nodejs';
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const actor = await requireAdmin(request);
-    if (!adminDb) return NextResponse.json({ error: 'Firestore is not configured.' }, { status: 503 });
+    if (!adminDb && !isDevCharacterWriter()) return NextResponse.json({ error: 'Firestore is not configured.' }, { status: 503 });
     const body = await request.json(), { id } = await params;
     if (isDevCharacterWriter()) return NextResponse.json(await editStudioCharacter(actor, id, body));
-    const ref = adminDb.collection('characters').doc(id), snapshot = await ref.get(), stored = snapshot.data();
+    const ref = adminDb!.collection('characters').doc(id), snapshot = await ref.get(), stored = snapshot.data();
     if (!stored) return NextResponse.json({ error: 'Character not found.' }, { status: 404 });
     if (!canManageStudioContent(actor, stored)) return NextResponse.json({ error: 'Character not found.' }, { status: 404 });
     const { imageUrl: _imageUrl, image: _image, createdBy: _createdBy, createdAt: _createdAt, updatedAt: _updatedAt, ...update } = body;
@@ -29,13 +29,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const actor = await requireAdmin(request);
-    if (!adminDb) return NextResponse.json({ error: 'Firestore is not configured.' }, { status: 503 });
+    if (!adminDb && !isDevCharacterWriter()) return NextResponse.json({ error: 'Firestore is not configured.' }, { status: 503 });
     const { id } = await params;
     if (isDevCharacterWriter()) {
       await deleteStudioCharacter(actor, id);
       return NextResponse.json({ id });
     }
-    const ref = adminDb.collection('characters').doc(id), stored = (await ref.get()).data();
+    const ref = adminDb!.collection('characters').doc(id), stored = (await ref.get()).data();
     if (!stored || !canManageStudioContent(actor, stored)) return NextResponse.json({ error: 'Character not found.' }, { status: 404 });
     await deleteCharacterImage(characterImageKey(stored.imageKey, stored.image));
     await ref.delete();

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { isDevCharacterWriter, isDevLoreWriter } from '../../../../../lib/dev-content-db';
+import { isDevCharacterWriter, isDevLoreWriter, isDevRateLimitWriter } from '../../../../../lib/dev-content-db';
 import { recordCharacterView } from '../../../../../lib/dev-characters';
 import { recordLoreView } from '../../../../../lib/dev-lores';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -18,7 +18,7 @@ export function OPTIONS() {
 }
 
 export async function POST(request: Request) {
-  if (!adminDb) return NextResponse.json({ error: 'View service is not configured.' }, { status: 503, headers: contributionHeaders });
+  if (!adminDb && !isDevRateLimitWriter()) return NextResponse.json({ error: 'View service is not configured.' }, { status: 503, headers: contributionHeaders });
 
   let body: Record<string, unknown>;
   try {
@@ -51,8 +51,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'RATE_LIMITED' }, { status: 429, headers: contributionHeaders });
   }
 
-  const collection = kind === 'lore' ? 'lores' : 'characters';
-  const content = adminDb.collection(collection).doc(id);
   const viewKey = createHash('sha256').update(identity).digest('hex');
   if ((kind === 'character' && isDevCharacterWriter()) || (kind === 'lore' && isDevLoreWriter())) {
     try {
@@ -62,6 +60,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Could not record this view.' }, { status: 503, headers: contributionHeaders });
     }
   }
+  if (!adminDb) return NextResponse.json({ error: 'View service is not configured.' }, { status: 503, headers: contributionHeaders });
+  const collection = kind === 'lore' ? 'lores' : 'characters';
+  const content = adminDb.collection(collection).doc(id);
   const visitor = content.collection('creatorViews').doc(viewKey);
 
   try {

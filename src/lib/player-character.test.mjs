@@ -59,7 +59,7 @@ function fixture() {
   }
   const db = { collection:name => { assert.equal(name,'characters'); return query(); }, runTransaction:async work => work({ get:async ref => snap(ref.id), create:(ref,data) => records.set(ref.id,data), update:(ref,data) => records.set(ref.id,{ ...records.get(ref.id), ...data }) }) };
   const common = {
-    ContributionError, contributionHeaders:{}, contributionBody:request => request.json(),
+    ContributionError, requireContributionFirestore: () => db, contributionHeaders:{}, contributionBody:request => request.json(),
     contributionPlayer:async request => { if (request.headers.get('authorization') !== 'owner') throw new ContributionError(401); return { id:owner }; },
     contributionError:error => Response.json({ error:'failed' }, { status:error.status ?? 400 }),
     limitContribution:async () => {},

@@ -13,7 +13,16 @@ export const creatorHeaders = {
 };
 
 /** Explicit public allowlist: email, birthday, avatar keys and moderation records stay private. */
-export async function creatorProfile(db: Firestore, id: string, viewerId: string) {
+export async function creatorProfile(db: Firestore | null, id: string, viewerId: string) {
+  if (!db) {
+    if (!(isDevProfileWriter() && isDevSocialWriter() && isDevVideoWriter())) throw new Error('PROFILE_UNAVAILABLE');
+    const profile = await getProfilePublic(id);
+    if (!profile) throw new Error('PLAYER_NOT_FOUND');
+    const own = id === viewerId;
+    const [social, clipCount] = await Promise.all([socialCounts(id, viewerId), creatorClipCount(id, own)]);
+    return { ...profile, followerCount: social.followers, friendCount: social.friends, clipCount,
+      following: own ? false : social.following, friendState: own ? null : social.state };
+  }
   const ref = db.collection('playerProfiles').doc(id);
   const useProfile = isDevProfileWriter();
   const profile = useProfile ? null : await ref.get();

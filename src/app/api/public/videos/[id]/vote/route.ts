@@ -18,7 +18,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   try {
-    if (!adminDb) throw new Error('Video service is not configured.');
+    if (!adminDb && !isDevVideoWriter()) throw new Error('Video service is not configured.');
     const { id } = await params;
     const { value } = await request.json();
     if (![1, -1].includes(value)) throw new Error('Invalid vote.');
@@ -26,9 +26,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'RATE_LIMITED' }, { status: 429, headers });
     }
     if (isDevVideoWriter()) return NextResponse.json(await voteVideo(id, player.id, value), { headers });
-    const video = adminDb.collection('videos').doc(id);
+    const video = adminDb!.collection('videos').doc(id);
     const vote = video.collection('votes').doc(`user:${player.id}`);
-    const next = await adminDb.runTransaction(async transaction => {
+    const next = await adminDb!.runTransaction(async transaction => {
       const [videoSnapshot, voteSnapshot] = await Promise.all([transaction.get(video), transaction.get(vote)]);
       const data = videoSnapshot.data();
       if (!data || data.status !== 'Published') throw new Error('Video not found.');

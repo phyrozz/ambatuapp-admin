@@ -2,8 +2,8 @@ import { FieldPath, FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { isDevSoundWriter } from "../../../../../lib/dev-content-db";
 import { createCreatorSound, listCreatorSounds } from "../../../../../lib/dev-sounds";
-import { adminDb } from "../../../../../lib/firebase-admin";
 import {
+  requireContributionFirestore,
   ContributionError,
   contributionBody,
   contributionError,
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     if (isDevSoundWriter()) return NextResponse.json(await listCreatorSounds(player.id, url), { headers: contributionHeaders });
     const requestedLimit = Number(url.searchParams.get("limit")) || 20;
     const limit = Math.min(50, Math.max(1, Math.floor(requestedLimit)));
-    const collection = adminDb!.collection("soundboardSounds");
+    const collection = requireContributionFirestore().collection("soundboardSounds");
     const cursorValue = url.searchParams.get("cursor");
     let cursorId: string | null = null;
     if (cursorValue) {
@@ -119,8 +119,8 @@ export async function POST(request: Request) {
       await createCreatorSound(player.id, id, fields, status, soundKey);
       return NextResponse.json({ id }, { status: 201, headers: contributionHeaders });
     }
-    const ref = adminDb!.collection("soundboardSounds").doc(id);
-    await adminDb!.runTransaction(async (transaction) => {
+    const ref = requireContributionFirestore().collection("soundboardSounds").doc(id);
+    await requireContributionFirestore().runTransaction(async (transaction) => {
       const existing = await transaction.get(ref);
       if (existing.exists) {
         if (

@@ -9,9 +9,9 @@ import { profileAvatarUrl } from '../../../lib/profile-avatars';
 export async function GET(request: Request) {
   try {
     await requireAdmin(request);
-    if (!adminDb) return NextResponse.json({ active: [] }, { status: 200 });
+    if (!adminDb && !isDevProfileWriter()) return NextResponse.json({ active: [] }, { status: 200 });
     if (isDevProfileWriter()) return NextResponse.json({ active: await listCustomAvatars() });
-    const snapshot = await adminDb.collection('playerProfiles').where('avatarType', '==', 'custom').get();
+    const snapshot = await adminDb!.collection('playerProfiles').where('avatarType', '==', 'custom').get();
     const active = await Promise.all(snapshot.docs.filter(doc => typeof doc.data().avatarKey === 'string').map(async doc => ({
       userId: doc.id,
       username: doc.data().username ?? doc.id,

@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   let player;
   try { player = await requirePlayer(request); } catch { return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers }); }
   const db = adminDb;
-  if (!db) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
+  if (!db && !(isDevProfileWriter())) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
   const params = new URL(request.url).searchParams;
   let filter: FriendFilter;
   try { filter = friendFilter(params); } catch { return NextResponse.json({ error: 'INVALID_FILTER' }, { status: 400, headers }); }
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
       const friends = ids.map(id => ({ id, ...profiles.get(id), state: relationships.get(id)?.state ?? null, pinned: relationships.get(id)?.pinned === true })).filter(item => matchesFriendFilter(item, filter));
       return NextResponse.json({ friends, nextCursor: rows.length > 15 && last ? Buffer.from(JSON.stringify({ q, name: last.username_lower, id: last.id, ...filter })).toString('base64url') : null }, { headers });
     }
-    let query = db.collection('playerProfiles').where('usernameLower', '>=', q).where('usernameLower', '<=', `${q}\uf8ff`).orderBy('usernameLower').orderBy(FieldPath.documentId()).limit(16);
+    let query = db!.collection('playerProfiles').where('usernameLower', '>=', q).where('usernameLower', '<=', `${q}\uf8ff`).orderBy('usernameLower').orderBy(FieldPath.documentId()).limit(16);
     if (cursor) query = query.startAfter(cursor.name, cursor.id);
     const snapshot = await query.get();
     const page = snapshot.docs.slice(0, 15);
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
     const profiles = await playerDisplayProfiles(ids, new Map());
     const relationships = isDevSocialWriter() ? await friendRelationships(player.id, ids) : null;
     const results = await Promise.all(ids.map(async id => {
-      const relationship = relationships ? relationships.get(id) ?? {} : (await db.collection('playerProfiles').doc(player.id).collection('friends').doc(id).get()).data() ?? {};
+      const relationship = relationships ? relationships.get(id) ?? {} : (await db!.collection('playerProfiles').doc(player.id).collection('friends').doc(id).get()).data() ?? {};
       return { id, ...profiles.get(id), state: relationship.state ?? null, pinned: relationship.pinned === true };
     }));
     const friends = results.filter(item => matchesFriendFilter(item, filter));

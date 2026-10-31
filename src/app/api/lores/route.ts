@@ -19,14 +19,14 @@ async function hydrate(id: string, data: Record<string, unknown>) {
 export async function GET(request: Request) {
   try {
     const actor = await requireAdmin(request);
-    if (!adminDb) return NextResponse.json({ configured: false, lores: [] });
+    if (!adminDb && !isDevLoreWriter()) return NextResponse.json({ configured: false, lores: [] });
     const url = new URL(request.url);
     if (isDevLoreWriter()) return NextResponse.json(await listStudioLores(actor, url));
     const filter = characterListFilter(url, isStudioRoot(actor) ? null : actor!.sub);
     let after = parseCharacterListCursor(url.searchParams.get('cursor'), filter);
     const matches: FirebaseFirestore.QueryDocumentSnapshot[] = [];
     while (matches.length <= filter.limit) {
-      let query: FirebaseFirestore.Query = adminDb.collection('lores');
+      let query: FirebaseFirestore.Query = adminDb!.collection('lores');
       if (filter.owner) query = query.where('createdBy', '==', filter.owner);
       query = query.orderBy(FieldPath.documentId()).limit(filter.limit + 1);
       if (after) query = query.startAfter(after);
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const actor = await requireAdmin(request);
-    if (!adminDb) return NextResponse.json({ error: 'Firestore is not configured.' }, { status: 503 });
+    if (!adminDb && !isDevLoreWriter()) return NextResponse.json({ error: 'Firestore is not configured.' }, { status: 503 });
     const body = await request.json();
     if (typeof body.text !== 'string' || !body.text.trim()) throw new Error('Lore text is required.');
     if (body.text.length > LORE_TEXT_LIMIT) throw new Error(`Lore text cannot exceed ${LORE_TEXT_LIMIT.toLocaleString()} characters.`);
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     const imageKeys = Array.isArray(body.imageKeys) ? body.imageKeys : [];
     if (actor && actor.roleId !== 'root' && imageKeys.some((key: unknown) => typeof key !== 'string' || !key.startsWith(`lores/${actor.sub}/`))) throw new Error('studio.errors.forbidden');
     const stored = { title: body.title, text: body.text, translations: body.translations ?? [], tags: body.tags ?? [], imageKeys, status: body.status ?? 'Draft', upvotes: 0, downvotes: 0, commentCount: 0, ...(actor ? { createdBy: actor.sub } : {}), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), updated: 'Just now' };
-    const ref = await adminDb.collection('lores').add(stored);
+    const ref = await adminDb!.collection('lores').add(stored);
     return NextResponse.json(await hydrate(ref.id, { ...stored, createdAt: null, updatedAt: null }), { status: 201 });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Request failed' }, { status: adminErrorStatus(error, 400) }); }
 }

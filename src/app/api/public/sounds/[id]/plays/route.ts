@@ -23,7 +23,7 @@ export function OPTIONS() {
 }
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!adminDb) return NextResponse.json({ error: 'Sound catalog is not configured.' }, { status: 503, headers });
+  if (!adminDb && !isDevSoundWriter()) return NextResponse.json({ error: 'Sound catalog is not configured.' }, { status: 503, headers });
 
   let player: Awaited<ReturnType<typeof playerFromRequest>>;
   if (_request.headers.has('authorization')) {
@@ -57,7 +57,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       const playCount = await recordSoundPlay(id, createHash('sha256').update(identity).digest('hex'), player?.id ?? null);
       return playCount === null ? NextResponse.json({ error: 'Sound not found.' }, { status: 404, headers }) : NextResponse.json({ playCount }, { headers });
     }
-    const sound = adminDb.collection('soundboardSounds').doc(id);
+    const sound = adminDb!.collection('soundboardSounds').doc(id);
     const snapshot = await sound.get();
     const data = snapshot.data();
     if (!snapshot.exists || !data || !isPublicSound(data) || !validSoundAssetKey(data.soundKey) || typeof data.name !== 'string' || typeof data.category !== 'string') {
@@ -72,7 +72,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       const listenerKey = createHash('sha256').update(identity).digest('hex');
       const listener = sound.collection('creatorListeners').doc(listenerKey);
       try {
-        await adminDb.runTransaction(async transaction => {
+        await adminDb!.runTransaction(async transaction => {
           const [latest, prior] = await Promise.all([transaction.get(sound), transaction.get(listener)]);
           const latestData = latest.data();
           if (!latest.exists || !latestData || !isPublicSound(latestData) || prior.exists) return;

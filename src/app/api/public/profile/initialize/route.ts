@@ -24,17 +24,17 @@ export function OPTIONS() { return new NextResponse(null, { headers }); }
 
 export async function POST(request: Request) {
   try {
-    if (!adminDb) throw new Error('Player profile service is not configured.');
+    if (!adminDb && !isDevProfileWriter()) throw new Error('Player profile service is not configured.');
     const player = await requirePlayer(request);
     if (isDevProfileWriter()) return NextResponse.json(await initializeProfile(player.id, player.email, player.emailVerified ? emailSearchKey(player.email) : null), { headers });
-    const profiles = adminDb.collection('playerProfiles');
-    const claims = adminDb.collection('playerUsernameClaims');
+    const profiles = adminDb!.collection('playerProfiles');
+    const claims = adminDb!.collection('playerUsernameClaims');
     const profileRef = profiles.doc(player.id);
     const identity = { emailSearchHash: player.emailVerified ? emailSearchKey(player.email) : FieldValue.delete() };
     const existing = await profileRef.get();
     const existingUsername = existing.data()?.username;
     if (typeof existingUsername === 'string' && existingUsername.trim()) {
-      await adminDb.runTransaction(async transaction => {
+      await adminDb!.runTransaction(async transaction => {
           const current = await transaction.get(profileRef);
           const username = current.data()?.username;
           if (typeof username === 'string' && username.trim()) {
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
       const matches = await profiles.where('usernameLower', '==', usernameLower).limit(1).get();
       if (matches.docs.some(doc => doc.id !== player.id)) continue;
       const claimRef = claims.doc(usernameLower);
-      const result = await adminDb.runTransaction(async transaction => {
+      const result = await adminDb!.runTransaction(async transaction => {
         const [current, claim] = await Promise.all([transaction.get(profileRef), transaction.get(claimRef)]);
         const currentUsername = current.data()?.username;
         if (typeof currentUsername === 'string' && currentUsername.trim()) {

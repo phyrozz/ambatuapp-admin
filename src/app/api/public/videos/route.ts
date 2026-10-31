@@ -72,7 +72,7 @@ function relevanceScore(data: { upvotes?: number; commentCount?: number; created
 
 export async function GET(request: Request) {
   if (isDevContentSnapshot()) return devContentRead('video', request);
-  if (!adminDb) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503, headers });
+  if (!adminDb && !isDevVideoWriter()) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503, headers });
   const url = new URL(request.url);
   const limit = Math.min(18, Math.max(1, Number(url.searchParams.get('limit')) || 8));
   const sort = url.searchParams.get('sort') ?? 'upvotes';
@@ -81,7 +81,7 @@ export async function GET(request: Request) {
     const decodedCursor = decodeRelevanceCursor(rawCursor);
     if (rawCursor && !decodedCursor) return NextResponse.json({ error: 'Invalid video cursor.' }, { status: 400, headers });
     const cursor = decodedCursor ?? { version: 1 as const, asOf: Date.now(), popular: null, fresh: null, freshDone: false };
-    let popularQuery = adminDb.collection('videos')
+    let popularQuery = adminDb!.collection('videos')
       .where('status', '==', 'Published')
       .orderBy('upvotes', 'desc')
       .orderBy('commentCount', 'desc')
@@ -89,7 +89,7 @@ export async function GET(request: Request) {
       .orderBy(FieldPath.documentId(), 'asc')
       .limit(limit + 1);
     if (cursor.popular) popularQuery = popularQuery.startAfter(cursor.popular.upvotes, cursor.popular.commentCount, new Timestamp(cursor.popular.seconds, cursor.popular.nanoseconds), cursor.popular.id);
-    let freshQuery = adminDb.collection('videos')
+    let freshQuery = adminDb!.collection('videos')
       .where('status', '==', 'Published')
       .where('createdAt', '>=', Timestamp.fromMillis(cursor.asOf - RELEVANCE_BOOST_WINDOW_MS))
       .where('createdAt', '<=', Timestamp.fromMillis(cursor.asOf))
@@ -124,7 +124,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ videos, nextCursor }, { headers });
   }
   if (sort !== 'newest') {
-    const snapshot = await adminDb.collection('videos').where('status', '==', 'Published').get();
+    const snapshot = await adminDb!.collection('videos').where('status', '==', 'Published').get();
     const ordered = snapshot.docs.sort((a, b) =>
       (b.data().upvotes ?? 0) - (a.data().upvotes ?? 0)
       || (b.data().createdAt?.toMillis?.() ?? 0) - (a.data().createdAt?.toMillis?.() ?? 0)
@@ -139,7 +139,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ videos, nextCursor }, { headers });
   }
   const cursor = Number(url.searchParams.get('cursor'));
-  let query = adminDb.collection('videos').orderBy('createdAt', 'desc').limit(limit + 1);
+  let query = adminDb!.collection('videos').orderBy('createdAt', 'desc').limit(limit + 1);
   if (Number.isFinite(cursor) && cursor > 0) query = query.startAfter(new Date(cursor));
   const snapshot = await query.get();
   const page = snapshot.docs.slice(0, limit);
@@ -155,7 +155,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    if (!adminDb) throw new Error('Video service is not configured.');
+    if (!adminDb && !isDevVideoWriter()) throw new Error('Video service is not configured.');
     const player = await requirePlayer(request);
     const { title, description, videoKey, thumbnailKey } = await request.json();
     if (typeof title !== 'string' || !title.trim() || title.length > 120) throw new Error('Enter a title up to 120 characters.');
@@ -173,7 +173,7 @@ export async function POST(request: Request) {
         upvotes: 0, downvotes: 0, commentCount: 0, userVote: 0, createdAt: row.created_at?.toISOString() ?? null }, { status: 201, headers });
     }
     const data = { title: title.trim(), description: description.trim(), videoKey, thumbnailKey, uploaderEmail: player.email, uploaderName: profile?.username ?? fallbackPlayerName(player.email), uploaderId: player.id, status: 'Published', upvotes: 0, downvotes: 0, commentCount: 0, createdAt: FieldValue.serverTimestamp() };
-    const ref = await adminDb.collection('videos').add(data);
+    const ref = await adminDb!.collection('videos').add(data);
     return NextResponse.json({ id: ref.id, ...data, uploader: profile?.username ?? fallbackPlayerName(player.email), uploaderAvatarUrl: profile?.avatarUrl ?? null, videoUrl: await signedVideoUrl(videoKey), downloadUrl: await signedVideoUrl(videoKey, `${ref.id}.mp4`), thumbnailUrl: await signedVideoUrl(thumbnailKey), userVote: 0, createdAt: new Date().toISOString() }, { status: 201, headers });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not publish video.' }, { status: 400, headers });

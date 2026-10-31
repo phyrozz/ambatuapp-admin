@@ -2,8 +2,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { isDevSoundWriter } from "../../../../../../lib/dev-content-db";
 import { deleteCreatorSound, editCreatorSound } from "../../../../../../lib/dev-sounds";
-import { adminDb } from "../../../../../../lib/firebase-admin";
 import {
+  requireContributionFirestore,
   ContributionError,
   contributionBody,
   contributionError,
@@ -45,7 +45,7 @@ export async function PATCH(
     const fields = soundFields(body);
     await limitContribution(player.id, "sound-edit", 30);
     if (isDevSoundWriter()) return NextResponse.json(await editCreatorSound(player.id, id, fields, requestedStatus, body.soundKey), { headers: contributionHeaders });
-    const ref = adminDb!.collection("soundboardSounds").doc(id);
+    const ref = requireContributionFirestore().collection("soundboardSounds").doc(id);
     const current = await ref.get();
     const data = current.data();
     if (
@@ -67,7 +67,7 @@ export async function PATCH(
         : adminSoundUploadKey(body.soundKey, `player_${player.id}`);
     if (soundKey !== oldSoundKey) await verifySoundUpload(soundKey);
     let status: 'Draft' | 'Published' = 'Published';
-    await adminDb!.runTransaction(async (transaction) => {
+    await requireContributionFirestore().runTransaction(async (transaction) => {
       const latest = await transaction.get(ref);
       const latestData = latest.data();
       if (
@@ -114,9 +114,9 @@ export async function DELETE(
       await deleteCreatorSound(player.id, id);
       return NextResponse.json({ deleted: true }, { headers: contributionHeaders });
     }
-    const ref = adminDb!.collection("soundboardSounds").doc(id);
+    const ref = requireContributionFirestore().collection("soundboardSounds").doc(id);
     let soundKey = "";
-    await adminDb!.runTransaction(async (transaction) => {
+    await requireContributionFirestore().runTransaction(async (transaction) => {
       const existing = await transaction.get(ref);
       const data = existing.data();
       if (

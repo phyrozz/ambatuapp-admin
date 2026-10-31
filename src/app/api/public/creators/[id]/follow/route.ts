@@ -20,12 +20,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   if (!validFriendId(id) || id === player.id || id === 'admin') return NextResponse.json({ error: 'INVALID_REQUEST' }, { status: 400, headers });
   const db = adminDb;
-  if (!db) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
+  if (!db && !(isDevProfileWriter() && isDevSocialWriter())) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
   try {
     const { action } = await request.json();
     if (!['follow', 'unfollow', 'accept'].includes(action)) return NextResponse.json({ error: 'INVALID_REQUEST' }, { status: 400, headers });
     if (isDevSocialWriter()) {
-      if (!(isDevProfileWriter() ? await getProfilePublic(id) : (await db.collection('playerProfiles').doc(id).get()).exists)) throw new Error('PLAYER_NOT_FOUND');
+      if (!(isDevProfileWriter() ? await getProfilePublic(id) : (await db!.collection('playerProfiles').doc(id).get()).exists)) throw new Error('PLAYER_NOT_FOUND');
       const result = await changeFollow(player.id, id, action as FollowAction);
       if (result.notify) {
         try { const sender = (await playerDisplayProfiles([player.id], new Map([[player.id, player.email]]))).get(player.id); await notifyFriendRequest(id, sender?.username ?? player.email.split('@')[0]); }
@@ -33,13 +33,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
       return NextResponse.json(await creatorProfile(db, id, player.id), { headers });
     }
-    const viewer = db.collection('playerProfiles').doc(player.id);
-    const target = db.collection('playerProfiles').doc(id);
+    const viewer = db!.collection('playerProfiles').doc(player.id);
+    const target = db!.collection('playerProfiles').doc(id);
     const following = viewer.collection('following').doc(id);
     const follower = target.collection('followers').doc(player.id);
     const ownFriend = viewer.collection('friends').doc(id);
     const otherFriend = target.collection('friends').doc(player.id);
-    const result = await db.runTransaction(async tx => {
+    const result = await db!.runTransaction(async tx => {
       const [targetProfile, currentFollow, currentFriend] = await Promise.all([tx.get(target), tx.get(following), tx.get(ownFriend)]);
       if (!targetProfile.exists) throw new Error('PLAYER_NOT_FOUND');
       const next = followTransition(currentFollow.exists, (currentFriend.data()?.state ?? null) as FriendState | null, action as FollowAction);

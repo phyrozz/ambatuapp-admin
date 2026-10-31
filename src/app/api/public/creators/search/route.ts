@@ -14,7 +14,7 @@ export function OPTIONS() { return new NextResponse(null, { headers }); }
 export async function GET(request: Request) {
   try { await requirePlayer(request); } catch { return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers }); }
   const db = adminDb;
-  if (!db) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
+  if (!db && !(isDevProfileWriter())) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
   const params = new URL(request.url).searchParams;
   const q = normalizeCreatorQuery(params.get('q') ?? '');
   const mode = creatorSearchMode(q);
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
       const display = await playerDisplayProfiles(page.map(row => row.id), new Map());
       return NextResponse.json({ players: page.map(row => ({ id: row.id, ...display.get(row.id) })), nextCursor: rows.length > 15 && last ? Buffer.from(JSON.stringify({ query: queryKey, name: last.username_lower ?? '', id: last.id })).toString('base64url') : null }, { headers });
     }
-    const profiles = db.collection('playerProfiles');
+    const profiles = db!.collection('playerProfiles');
     let query = mode === 'email'
       ? profiles.where('emailSearchHash', '==', queryKey).orderBy(FieldPath.documentId()).limit(16)
       : profiles.where('usernameLower', '>=', q).where('usernameLower', '<=', `${q}\uf8ff`).orderBy('usernameLower').orderBy(FieldPath.documentId()).limit(16);

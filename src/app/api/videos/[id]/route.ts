@@ -15,7 +15,7 @@ type Context = { params: Promise<{ id: string }> };
 export async function PATCH(request: Request, { params }: Context) {
   try {
     const actor = await requireAdmin(request);
-    if (!adminDb) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503 });
+    if (!adminDb && !isDevVideoWriter()) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503 });
     const { id } = await params;
     if (isDevVideoWriter()) {
       const body = await request.json();
@@ -28,7 +28,7 @@ export async function PATCH(request: Request, { params }: Context) {
       const result = await editStudioVideo(actor, id, fields, keys);
       return result ? NextResponse.json(result) : NextResponse.json({ error: 'Video not found.' }, { status: 404 });
     }
-    const ref = adminDb.collection('videos').doc(id);
+    const ref = adminDb!.collection('videos').doc(id);
     const snapshot = await ref.get();
     const prior = snapshot.data();
     if (!prior || !canManageStudioContent(actor, prior)) return NextResponse.json({ error: 'Video not found.' }, { status: 404 });
@@ -50,18 +50,18 @@ export async function PATCH(request: Request, { params }: Context) {
 export async function DELETE(request: Request, { params }: Context) {
   try {
     const actor = await requireAdmin(request);
-    if (!adminDb) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503 });
+    if (!adminDb && !isDevVideoWriter()) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503 });
     const { id } = await params;
     if (isDevVideoWriter()) {
       const removed = await deleteManagedVideo(id, actor);
       return removed ? NextResponse.json({ id }) : NextResponse.json({ error: 'Video not found.' }, { status: 404 });
     }
-    const ref = adminDb.collection('videos').doc(id);
+    const ref = adminDb!.collection('videos').doc(id);
     const snapshot = await ref.get();
     const prior = snapshot.data();
     if (!prior || !canManageStudioContent(actor, prior)) return NextResponse.json({ error: 'Video not found.' }, { status: 404 });
     await deleteVideoAssets(prior);
-    await adminDb.recursiveDelete(ref);
+    await adminDb!.recursiveDelete(ref);
     return NextResponse.json({ id });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not delete video.' }, { status: adminErrorStatus(error, 400) });

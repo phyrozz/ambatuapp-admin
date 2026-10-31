@@ -2,9 +2,9 @@ import { FieldPath, FieldValue } from "firebase-admin/firestore";
 import { isDevCharacterWriter } from "../../../../../lib/dev-content-db";
 import { createCreatorCharacter, listCreatorCharacters } from "../../../../../lib/dev-characters";
 import { NextResponse } from "next/server";
-import { adminDb } from "../../../../../lib/firebase-admin";
 import { signedCharacterImageUrl } from "../../../../../lib/s3-images";
 import {
+  requireContributionFirestore,
   ContributionError,
   contributionBody,
   contributionError,
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     if (isDevCharacterWriter()) return NextResponse.json(await listCreatorCharacters(player.id, url), { headers: contributionHeaders });
     const requestedLimit = Number(url.searchParams.get("limit")) || 20;
     const limit = Math.min(50, Math.max(1, Math.floor(requestedLimit)));
-    const collection = adminDb!.collection("characters");
+    const collection = requireContributionFirestore().collection("characters");
     const afterId = cursorId(url.searchParams.get("cursor"));
     let query = collection
       .where("uploaderId", "==", player.id)
@@ -115,8 +115,8 @@ export async function POST(request: Request) {
       await createCreatorCharacter(player.id, body.submissionId, fields);
       return NextResponse.json({ id: body.submissionId }, { status: 201, headers: contributionHeaders });
     }
-    const ref = adminDb!.collection("characters").doc(body.submissionId);
-    await adminDb!.runTransaction(async (transaction) => {
+    const ref = requireContributionFirestore().collection("characters").doc(body.submissionId);
+    await requireContributionFirestore().runTransaction(async (transaction) => {
       const existing = await transaction.get(ref);
       if (existing.exists) {
         if (

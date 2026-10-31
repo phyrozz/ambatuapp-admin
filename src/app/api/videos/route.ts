@@ -15,13 +15,13 @@ export const runtime = 'nodejs';
 export async function GET(request: Request) {
   try {
     const actor = await requireAdmin(request);
-    if (!adminDb) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503 });
+    if (!adminDb && !isDevVideoWriter()) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503 });
     if (isDevVideoWriter()) return NextResponse.json(await listStudioVideos(actor, new URL(request.url)));
     const url = new URL(request.url), filter = characterListFilter(url, isStudioRoot(actor) ? null : actor!.sub);
     let after = parseCharacterListCursor(url.searchParams.get('cursor'), filter);
     const matches: FirebaseFirestore.QueryDocumentSnapshot[] = [];
     while (matches.length <= filter.limit) {
-      let query: FirebaseFirestore.Query = adminDb.collection('videos');
+      let query: FirebaseFirestore.Query = adminDb!.collection('videos');
       if (filter.owner) query = query.where('createdBy', '==', filter.owner);
       query = query.orderBy(FieldPath.documentId()).limit(filter.limit + 1);
       if (after) query = query.startAfter(after);
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const actor = await requireAdmin(request);
-    if (!adminDb) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503 });
+    if (!adminDb && !isDevVideoWriter()) return NextResponse.json({ error: 'Video service is not configured.' }, { status: 503 });
     const body = await request.json();
     const fields = videoFields(body);
     const owner = studioContentOwner(actor);
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     if (uploadedVideo.Metadata?.['ambatu-compression'] !== VIDEO_COMPRESSION_VERSION || uploadedVideo.ContentType !== 'video/mp4') throw new Error('Wait for video compression to finish.');
     if (isDevVideoWriter()) return NextResponse.json(await createStudioVideo(actor, fields, keys), { status: 201 });
     const stored = { ...fields, ...keys, uploaderEmail: actor?.email ?? 'Ambatu Admin', uploaderName: actor?.profile?.displayName ?? 'Ambatu Admin', uploaderId: 'admin', ...(actor ? { createdBy: actor.sub } : {}), upvotes: 0, downvotes: 0, commentCount: 0, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() };
-    const ref = await adminDb.collection('videos').add(stored);
+    const ref = await adminDb!.collection('videos').add(stored);
     return NextResponse.json(await hydrateVideo(ref.id, (await ref.get()).data() ?? {}), { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not create video.' }, { status: adminErrorStatus(error, 400) });

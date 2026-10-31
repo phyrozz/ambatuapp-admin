@@ -9,14 +9,14 @@ export const runtime = 'nodejs';
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id) || !adminDb) return new NextResponse(null, { status: 404 });
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id) || (!adminDb && !isDevSoundWriter())) return new NextResponse(null, { status: 404 });
   try {
     if (isDevSoundWriter()) {
       const key = await publicSoundKey(id);
       if (!key) return new NextResponse(null, { status: 404 });
       return NextResponse.redirect(await signedSoundUrl(key), { status: 302, headers: { 'Cache-Control': 'no-store' } });
     }
-    const snapshot = await adminDb.collection('soundboardSounds').doc(id).get();
+    const snapshot = await adminDb!.collection('soundboardSounds').doc(id).get();
     const data = snapshot.data();
     const soundKey = data?.soundKey;
     if (!snapshot.exists || !data || !isPublicSound(data) || !validSoundAssetKey(soundKey)) return new NextResponse(null, { status: 404 });

@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: 'Sign in required.' }, { status: 401, headers });
   }
-  if (!adminDb) return NextResponse.json({ error: 'Player profiles are unavailable.' }, { status: 503, headers });
+  if (!adminDb && !isDevProfileWriter()) return NextResponse.json({ error: 'Player profiles are unavailable.' }, { status: 503, headers });
   try {
     const body = await request.json();
     const ids = body?.ids;
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ names, avatars }, { headers });
     }
     const refs = unique.map(id => adminDb!.collection('playerProfiles').doc(id));
-    const docs = refs.length ? await adminDb.getAll(...refs) : [];
+    const docs = refs.length ? await adminDb!.getAll(...refs) : [];
     const names: Record<string, string> = {};
     const avatars: Record<string, string> = {};
     await Promise.all(docs.map(async (doc, index) => {

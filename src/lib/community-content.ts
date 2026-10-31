@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { adminDb } from "./firebase-admin";
 import { requirePlayer } from "./player-auth";
 import { allowPlayerWrite } from "./public-write-limits";
+import { isDevContentSnapshot, isDevRateLimitWriter } from "./dev-content-db";
 
 export const contributionHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,12 +24,17 @@ export function contributionStatus(value: unknown, fallback: 'Draft' | 'Publishe
 }
 
 export async function contributionPlayer(request: Request) {
-  if (!adminDb) throw new ContributionError(503);
+  if (!adminDb && !isDevContentSnapshot()) throw new ContributionError(503);
   try {
     return await requirePlayer(request);
   } catch {
     throw new ContributionError(401);
   }
+}
+
+export function requireContributionFirestore() {
+  if (!adminDb) throw new ContributionError(503);
+  return adminDb;
 }
 
 export async function contributionBody(
@@ -66,7 +72,7 @@ export async function limitContribution(
   action: string,
   daily: number,
 ) {
-  if (!adminDb) throw new ContributionError(503);
+  if (!adminDb && !isDevRateLimitWriter()) throw new ContributionError(503);
   if (
     !(await allowPlayerWrite(adminDb, playerId, action, [
       { key: "minute", max: 3, windowMs: 60_000 },

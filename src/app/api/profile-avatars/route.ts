@@ -12,9 +12,9 @@ export const runtime = 'nodejs';
 export async function GET(request: Request) {
   try {
     await requireAdmin(request);
-    if (!adminDb) return NextResponse.json({ avatars: [] }, { status: 200 });
+    if (!adminDb && !isDevProfileWriter()) return NextResponse.json({ avatars: [] }, { status: 200 });
     if (isDevProfileWriter()) return NextResponse.json({ avatars: await listPresets(true) });
-    const snapshot = await adminDb.collection('profileAvatars').orderBy('createdAt', 'desc').get();
+    const snapshot = await adminDb!.collection('profileAvatars').orderBy('createdAt', 'desc').get();
     const avatars = await Promise.all(snapshot.docs.map(async doc => {
       const users = await adminDb!.collection('playerProfiles').where('avatarId', '==', doc.id).count().get();
       return { id: doc.id, name: doc.data().name ?? '', imageUrl: await profileAvatarUrl(doc.data().imageKey), userCount: users.data().count };
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   try {
     await requireAdmin(request);
     await requireAdmin(request, { module: 'profile-avatars', action: 'upload' });
-    if (!adminDb) return NextResponse.json({ error: 'Firestore is not configured.' }, { status: 503 });
+    if (!adminDb && !isDevProfileWriter()) return NextResponse.json({ error: 'Firestore is not configured.' }, { status: 503 });
     const form = await request.formData();
     const name = String(form.get('name') ?? '').normalize('NFKC').trim().slice(0, 48);
     const file = form.get('image');
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       const imageUrl = await profileAvatarUrl(savedKey);
       return NextResponse.json({ id, name, imageUrl, userCount: 0 }, { status: 201 });
     }
-    await adminDb.collection('profileAvatars').doc(id).set({ name, imageKey, contentType: extension === 'png' ? 'image/png' : 'image/jpeg', createdAt: FieldValue.serverTimestamp() });
+    await adminDb!.collection('profileAvatars').doc(id).set({ name, imageKey, contentType: extension === 'png' ? 'image/png' : 'image/jpeg', createdAt: FieldValue.serverTimestamp() });
     return NextResponse.json({ id, name, imageUrl: await profileAvatarUrl(imageKey), userCount: 0 }, { status: 201 });
   } catch (error) {
     if (imageKey) await bestEffortDeleteProfileAvatar(imageKey);

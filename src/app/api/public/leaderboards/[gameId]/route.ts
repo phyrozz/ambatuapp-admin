@@ -33,12 +33,12 @@ export function OPTIONS() {
 export async function GET(_request: Request, { params }: { params: Promise<{ gameId: string }> }) {
   const { gameId } = await params;
   if (!gameIds.has(gameId)) return json({ error: 'Unknown game.' }, 404);
-  if (!adminDb) return json({ error: 'Leaderboard service is not configured.' }, 503);
+  if (!adminDb && !isDevLeaderboardWriter()) return json({ error: 'Leaderboard service is not configured.' }, 503);
   if (isDevLeaderboardWriter()) {
     try { return json({ entries: await topScores(gameId) }); }
     catch { return json({ error: 'Leaderboard service is not configured.' }, 503); }
   }
-  const snapshot = await adminDb.collection('leaderboards').doc(gameId).collection('entries').orderBy('score', 'desc').orderBy('updatedAt', 'asc').limit(20).get();
+  const snapshot = await adminDb!.collection('leaderboards').doc(gameId).collection('entries').orderBy('score', 'desc').orderBy('updatedAt', 'asc').limit(20).get();
   const profiles = await playerDisplayProfiles(snapshot.docs.map((doc) => doc.id), new Map(snapshot.docs.map((doc) => [doc.id, doc.data().player ?? 'Player'])));
   return json({ entries: snapshot.docs.map((doc, index) => {
     const entry = doc.data();
@@ -51,15 +51,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ gam
   try {
     const { gameId } = await params;
     if (!gameIds.has(gameId)) return json({ error: 'Unknown game.' }, 404);
-    if (!adminDb) return json({ error: 'Leaderboard service is not configured.' }, 503);
+    if (!adminDb && !isDevLeaderboardWriter()) return json({ error: 'Leaderboard service is not configured.' }, 503);
     const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
     if (!token) return json({ error: 'Sign in to submit a score.' }, 401);
     const claims = await accessVerifier().verify(token);
     const { score } = await request.json();
     if (!Number.isSafeInteger(score) || score < 0 || score > 1_000_000) return json({ error: 'Invalid score.' }, 400);
     if (isDevLeaderboardWriter()) { await submitScore(gameId, claims.sub, score); return json({ ok: true }); }
-    const entry = adminDb.collection('leaderboards').doc(gameId).collection('entries').doc(claims.sub);
-    await adminDb.runTransaction(async transaction => {
+    const entry = adminDb!.collection('leaderboards').doc(gameId).collection('entries').doc(claims.sub);
+    await adminDb!.runTransaction(async transaction => {
       const current = await transaction.get(entry);
       if (!current.exists || score > current.data()?.score) {
         transaction.set(entry, { player: `Player ${claims.sub.slice(0, 6)}`, score, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
