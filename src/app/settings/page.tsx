@@ -54,6 +54,7 @@ function Settings() {
   return (
     <>
       <PageHeader eyebrow={t('studio.common.eyebrow')} title={t('studio.modules.settings')} description={t('studio.settings.description')} />
+      <ApiRateLimitSettings canEdit={canEdit} />
       <Notice>{error || notice}</Notice>
       <form className="studio-editor settings-editor" onSubmit={event => void save(event)}>
         <h2>
@@ -90,5 +91,61 @@ function Settings() {
         )}
       </form>
     </>
+  );
+}
+
+function ApiRateLimitSettings({ canEdit }: { canEdit: boolean }) {
+  const { t } = useI18n();
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [version, setVersion] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    studioApi('/api/settings/api-rate-limit').then(data => {
+      if (active) { setEnabled(data.enabled); setVersion(data.version); }
+    }).catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'studio.errors.request'); });
+    return () => { active = false; };
+  }, []);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (enabled === null) return;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const data = await studioApi('/api/settings/api-rate-limit', { method: 'PUT', body: JSON.stringify({ enabled, version }) });
+      setEnabled(data.enabled); setVersion(data.version); setNotice('studio.settings.apiRateSaved');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'studio.errors.request');
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <form className="studio-editor settings-editor" onSubmit={event => void save(event)}>
+      <h2>
+        <SettingsIcon size={20} />
+        {t('studio.settings.apiRateTitle')}
+      </h2>
+      <p className="studio-help">{t('studio.settings.apiRateHelp')}</p>
+      <Notice>{error || notice}</Notice>
+      {enabled === null && !error && <Spinner label={t('studio.common.loading')} />}
+      {enabled !== null && (
+        <>
+          <label className="settings-checkbox">
+            <input type="checkbox" checked={enabled} disabled={!canEdit || busy} onChange={event => setEnabled(event.target.checked)} />
+            {t('studio.settings.apiRateEnabled')}
+          </label>
+          {canEdit && (
+            <div className="modal-actions">
+              <button className="button primary" disabled={busy}>
+                {busy ? <Spinner label={t('studio.common.saving')} /> : t('studio.common.save')}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </form>
   );
 }

@@ -5,11 +5,15 @@ import test from 'node:test';
 import ts from 'typescript';
 import { apiLimitFor, clientIpHeader, createLocalApiLimiter, trustedClientIp } from './lib/api-rate-limit.ts';
 
-function setup(storeUnavailable = false, env = { API_RATE_LIMIT_TRUSTED_IP_HEADER: 'x-client-ip' }) {
+function setup(storeUnavailable = false, env = { API_RATE_LIMIT_TRUSTED_IP_HEADER: 'x-client-ip' }, setting = true) {
   const counts = new Map();
   const mocks = {
     'next/server': { NextResponse: { next: () => ({ status: 200 }), json: (body, options) => ({ body, ...options }) } },
     './lib/api-rate-limit': { apiLimitFor, clientIpHeader, createLocalApiLimiter, trustedClientIp },
+    './lib/api-rate-limit-settings': { readApiRateLimitSettings: async () => {
+      if (setting === 'unavailable') throw new Error('unavailable');
+      return { enabled: setting };
+    } },
     './lib/api-auth': { requireStudioIdentity: async () => null },
     './lib/firebase-admin': { adminDb: {} },
     './lib/player-auth': { playerFromRequest: async request => {
@@ -46,6 +50,16 @@ test('verified users have independent budgets and public denials support CORS', 
   assert.equal(denied.headers['Access-Control-Allow-Origin'], '*');
   assert.equal((await proxy(request('POST', '/api/public/profile', { authorization: 'valid-b' }))).status, 200);
   assert.equal((await proxy(request('GET', '/api/public/profile', { authorization: 'valid-a' }))).status, 200);
+});
+
+test('disabling the API-wide limiter bypasses identity and counters across requests', async () => {
+  const proxy = setup(true, { NODE_ENV: 'production' }, false);
+  for (let i = 0; i < 65; i++) assert.equal((await proxy(request('POST', '/api/public/profile'))).status, 200);
+});
+
+test('an unavailable settings store fails closed', async () => {
+  const proxy = setup(false, { NODE_ENV: 'production' }, 'unavailable');
+  assert.equal((await proxy(request('GET', '/api/public/profile'))).status, 503);
 });
 
 test('invalid credentials use the trusted IP and missing identity fails closed', async () => {

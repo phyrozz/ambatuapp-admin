@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { apiLimitFor, clientIpHeader, createLocalApiLimiter, trustedClientIp } from './lib/api-rate-limit';
+import { readApiRateLimitSettings } from './lib/api-rate-limit-settings';
 import { requireStudioIdentity } from './lib/api-auth';
 import { adminDb } from './lib/firebase-admin';
 import { playerFromRequest } from './lib/player-auth';
@@ -38,6 +39,7 @@ export async function proxy(request: NextRequest) {
 
   const headers = responseHeaders(request);
   try {
+    if (!(await readApiRateLimitSettings(adminDb)).enabled) return NextResponse.next();
     const identity = await identityFor(request);
     const limit = apiLimitFor(request.method, request.nextUrl.pathname);
     const localFallback = !identity && process.env.NODE_ENV === 'development'
