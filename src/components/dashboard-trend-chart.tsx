@@ -5,7 +5,7 @@ import { useI18n } from './studio-i18n';
 
 type Point = { date: string; count: number };
 
-export function DashboardTrendChart({ points, label, pointLabel }: { points: Point[]; label: string; pointLabel: string }) {
+export function DashboardTrendChart({ points, ongoingDate, label, pointLabel }: { points: Point[]; ongoingDate?: string; label: string; pointLabel: string }) {
   const { t } = useI18n();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
@@ -17,7 +17,11 @@ export function DashboardTrendChart({ points, label, pointLabel }: { points: Poi
   const shown = points.find(point => point.date === hoveredDate) ?? points[activeIndex];
   const max = Math.max(1, ...points.map(point => point.count));
   const dateLabel = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
-  const description = (point: Point) => t(pointLabel, { date: dateLabel(point.date), count: point.count.toLocaleString() });
+  const ongoingLabel = t('studio.dashboard.todayInProgress');
+  const description = (point: Point) => {
+    const label = t(pointLabel, { date: dateLabel(point.date), count: point.count.toLocaleString() });
+    return point.date === ongoingDate ? `${label}. ${ongoingLabel}` : label;
+  };
 
   function moveSelection(index: number) {
     const next = Math.max(0, Math.min(points.length - 1, index));
@@ -29,13 +33,16 @@ export function DashboardTrendChart({ points, label, pointLabel }: { points: Poi
   return (
     <div className="dashboard-chart-wrap">
       <div className="dashboard-chart-readout" aria-hidden="true">
-        <span>{dateLabel(shown.date)}</span>
+        <span>
+          {dateLabel(shown.date)}
+          {shown.date === ongoingDate && <small className="dashboard-chart-ongoing-label">{ongoingLabel}</small>}
+        </span>
         <strong>{shown.count.toLocaleString()}</strong>
       </div>
       <div className="dashboard-chart" role="radiogroup" aria-label={label} onPointerLeave={() => setHoveredDate(null)}>
         {points.map((point, index) => (
           <button
-            className="dashboard-bar-column"
+            className={`dashboard-bar-column${point.date === ongoingDate ? ' dashboard-bar-column-ongoing' : ''}`}
             key={point.date}
             type="button"
             role="radio"
@@ -59,7 +66,10 @@ export function DashboardTrendChart({ points, label, pointLabel }: { points: Poi
       </div>
       <div className="dashboard-chart-axis" aria-hidden="true">
         <span>{dateLabel(points[0].date)}</span>
-        <span>{dateLabel(points[points.length - 1].date)}</span>
+        <span>
+          {dateLabel(points[points.length - 1].date)}
+          {points[points.length - 1].date === ongoingDate && <small className="dashboard-chart-ongoing-label">{ongoingLabel}</small>}
+        </span>
       </div>
     </div>
   );

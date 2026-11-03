@@ -157,8 +157,8 @@ export async function dashboardCounts(now: number) {
       count(*) FILTER (WHERE last_active_at >= $1::timestamptz - interval '30 days')::int AS "activeMonth" FROM app.player_profiles`, [new Date(now)])).rows[0];
     const rows = (await db.query<{ date: string; count: number }>(`SELECT to_char(bucket AT TIME ZONE 'Asia/Manila', 'YYYY-MM-DD') AS date, count(p.created_at)::int AS count
       FROM generate_series($1::timestamptz, $2::timestamptz, interval '24 hours') AS bucket
-      LEFT JOIN app.player_profiles p ON p.created_at >= bucket AND p.created_at < bucket + interval '24 hours'
-      GROUP BY bucket ORDER BY bucket`, [new Date(today - 14 * day), new Date(today - day)])).rows;
+      LEFT JOIN app.player_profiles p ON p.created_at >= bucket AND p.created_at < bucket + interval '24 hours' AND p.created_at <= $3::timestamptz
+      GROUP BY bucket ORDER BY bucket`, [new Date(today - 14 * day), new Date(today), new Date(now)])).rows;
     return { ...counts, registrationTrend: rows };
   });
 }

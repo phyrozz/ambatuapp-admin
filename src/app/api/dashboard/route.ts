@@ -20,14 +20,15 @@ export async function GET(request: Request) {
       profiles.where('lastActiveAt', '>=', since(7)).count().get(),
       profiles.where('lastActiveAt', '>=', since(30)).count().get(),
     ]);
-    // Completed Philippine calendar days make the two seven-day periods comparable.
+    // Include 14 completed Philippine days plus today's partial count.
     const day = 24 * 60 * 60 * 1000;
     const phOffset = 8 * 60 * 60 * 1000;
     const today = Math.floor((now + phOffset) / day) * day - phOffset;
-    const registrationTrend = await Promise.all(Array.from({ length: 14 }, async (_, index) => {
+    const registrationTrend = await Promise.all(Array.from({ length: 15 }, async (_, index) => {
       const start = today - (14 - index) * day;
+      const end = Math.min(start + day, now);
       const count = await profiles.where('createdAt', '>=', Timestamp.fromMillis(start))
-        .where('createdAt', '<', Timestamp.fromMillis(start + day)).count().get();
+        .where('createdAt', '<', Timestamp.fromMillis(end)).count().get();
       return { date: new Date(start + phOffset).toISOString().slice(0, 10), count: count.data().count };
     }));
     return NextResponse.json({

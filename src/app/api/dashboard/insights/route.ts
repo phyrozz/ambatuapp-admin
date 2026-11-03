@@ -18,7 +18,7 @@ const kinds = [
 async function contentStats(item: typeof kinds[number], today: number) {
   if (item.postgres()) return withDevContentDb(async db => {
     const result = await db.query<{ status: string | null; created_at: string | null; n: number }>(`SELECT status, to_char(created_at AT TIME ZONE 'Asia/Manila', 'YYYY-MM-DD') AS created_at, count(*)::int AS n FROM app.content WHERE kind=$1 GROUP BY status, to_char(created_at AT TIME ZONE 'Asia/Manila', 'YYYY-MM-DD')`, [item.kind]);
-    const trend = Array(14).fill(0) as number[];
+    const trend = Array(15).fill(0) as number[];
     let published = 0, draft = 0, other = 0;
     for (const row of result.rows) {
       if (row.status === 'Published') published += row.n;
@@ -28,7 +28,7 @@ async function contentStats(item: typeof kinds[number], today: number) {
       if (row.created_at) {
         const date = row.created_at;
         const index = Math.round((Date.parse(`${date}T00:00:00Z`) - (today + offset - 14 * day)) / day);
-        if (index >= 0 && index < 14) trend[index] += row.n;
+        if (index >= 0 && index < 15) trend[index] += row.n;
       }
     }
     return { kind: item.kind, published, draft, other, trend };
@@ -87,6 +87,6 @@ export async function GET(request: Request) {
       allowed('profile-avatars') ? settle(pendingAvatars()) : null,
       allowed('chat-reports') ? settle(openReports()) : null,
     ]);
-    return NextResponse.json({ content, top, comments, follows, avatars, reports, dates: Array.from({ length: 14 }, (_, i) => new Date(today + offset - (14 - i) * day).toISOString().slice(0, 10)) }, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ content, top, comments, follows, avatars, reports, dates: Array.from({ length: 15 }, (_, i) => new Date(today + offset - (14 - i) * day).toISOString().slice(0, 10)) }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) { return studioError(error); }
 }

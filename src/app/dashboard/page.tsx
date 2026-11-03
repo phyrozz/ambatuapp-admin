@@ -66,8 +66,9 @@ function Dashboard() {
   ] : [];
 
   const trend = data?.registrationTrend ?? [];
-  const previousWeek = trend.slice(0, 7).reduce((sum, point) => sum + point.count, 0);
-  const recentWeek = trend.slice(7).reduce((sum, point) => sum + point.count, 0);
+  const completedTrend = trend.slice(0, -1);
+  const previousWeek = completedTrend.slice(0, 7).reduce((sum, point) => sum + point.count, 0);
+  const recentWeek = completedTrend.slice(7).reduce((sum, point) => sum + point.count, 0);
   const change = previousWeek ? Math.round(((recentWeek - previousWeek) / previousWeek) * 100) : null;
 
   return (
@@ -77,13 +78,13 @@ function Dashboard() {
         title={t('studio.modules.dashboard')}
         action={(
           <button type="button" className="button ghost" onClick={() => void load()} disabled={loading}>
-            <RefreshCw size={16} />
+            {loading ? <Spinner label={t('studio.common.loading')} /> : <RefreshCw size={16} />}
             {t('studio.common.refresh')}
           </button>
         )}
       />
       <Notice>{error}</Notice>
-      {loading && !data && <Spinner label={t('studio.common.loading')} />}
+      {loading && !data && <DashboardLoadingSkeleton label={t('studio.common.loading')} />}
       {data && (
         <>
           <p className="dashboard-updated">{t('studio.dashboard.updated', { time: new Date(data.asOf).toLocaleString(undefined, { timeZone: 'Asia/Manila', timeZoneName: 'short' }) })}</p>
@@ -113,7 +114,7 @@ function Dashboard() {
                   <small>{change === null ? t(previousWeek === 0 && recentWeek === 0 ? 'studio.dashboard.noChange' : 'studio.dashboard.noBaseline') : t('studio.dashboard.change', { change: `${change > 0 ? '+' : ''}${change}%` })}</small>
                 </div>
               </div>
-              <DashboardTrendChart points={trend} label={t('studio.dashboard.registrationTrend')} pointLabel="studio.dashboard.profilePoint" />
+              <DashboardTrendChart points={trend} ongoingDate={trend[trend.length - 1]?.date} label={t('studio.dashboard.registrationTrend')} pointLabel="studio.dashboard.profilePoint" />
             </section>
             <section className="dashboard-panel dashboard-engagement">
               <h2>{t('studio.dashboard.engagement')}</h2>
@@ -129,5 +130,45 @@ function Dashboard() {
         </>
       )}
     </>
+  );
+}
+
+function DashboardLoadingSkeleton({ label }: { label: string }) {
+  return (
+    <div className="dashboard-skeleton" role="status" aria-label={label} aria-busy="true">
+      <div className="dashboard-grid" aria-hidden="true">
+        {Array.from({ length: 5 }, (_, index) => (
+          <article className="dashboard-card" key={index}>
+            <div className="dashboard-card-heading">
+              <span className="dashboard-skeleton-block dashboard-skeleton-icon" />
+              <span className="dashboard-skeleton-block dashboard-skeleton-heading" />
+            </div>
+            <span className="dashboard-skeleton-block dashboard-skeleton-number" />
+          </article>
+        ))}
+      </div>
+      <div className="dashboard-insights" aria-hidden="true">
+        <section className="dashboard-panel dashboard-trend dashboard-skeleton-trend">
+          <div className="dashboard-panel-heading">
+            <div className="dashboard-skeleton-copy">
+              <span className="dashboard-skeleton-block dashboard-skeleton-title" />
+              <span className="dashboard-skeleton-block dashboard-skeleton-subtitle" />
+            </div>
+            <div className="dashboard-skeleton-copy dashboard-skeleton-align-end">
+              <span className="dashboard-skeleton-block dashboard-skeleton-comparison" />
+              <span className="dashboard-skeleton-block dashboard-skeleton-subtitle" />
+            </div>
+          </div>
+          <span className="dashboard-skeleton-block dashboard-skeleton-chart" />
+        </section>
+        <section className="dashboard-panel dashboard-engagement dashboard-skeleton-engagement">
+          <span className="dashboard-skeleton-block dashboard-skeleton-title" />
+          <span className="dashboard-skeleton-block dashboard-skeleton-engagement-value" />
+          <span className="dashboard-skeleton-block dashboard-skeleton-subtitle" />
+          <span className="dashboard-skeleton-block dashboard-skeleton-progress" />
+          <span className="dashboard-skeleton-block dashboard-skeleton-subtitle" />
+        </section>
+      </div>
+    </div>
   );
 }

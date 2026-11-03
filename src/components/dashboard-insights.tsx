@@ -10,28 +10,33 @@ type Kind = 'character' | 'lore' | 'video' | 'sound';
 type Counts = { kind: Kind; published: number; draft: number; other: number; trend: number[] };
 type Period = { previous: number; recent: number };
 type Insights = { restricted?: boolean; content: (Counts | null)[]; top: ({ kind: Kind; title: string | null; votes: number }[] | null)[]; comments: Period | null; follows: Period | null; avatars: number | null; reports: number | null; dates: string[] };
-const urls: Record<Kind, string> = { character: '/', lore: '/lores', video: '/videos', sound: '/sounds' };
+const urls: Record<Kind, string> = { character: '/characters', lore: '/lores', video: '/videos', sound: '/sounds' };
 
 export function DashboardInsights() {
   const { t } = useI18n();
   const [data, setData] = useState<Insights | null>(null);
   const [failed, setFailed] = useState(false);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true;
     studioApi('/api/dashboard/insights').then(result => {
       if (active) setData(result as Insights);
     }).catch(() => {
       if (active) setFailed(true);
+    }).finally(() => {
+      if (active) setLoading(false);
     });
     return () => { active = false; };
   }, []);
   if (failed) return <p className="dashboard-insight-status">{t('studio.dashboard.insightsUnavailable')}</p>;
+  if (loading) return <DashboardInsightsSkeleton label={t('studio.common.loading')} />;
   if (!data || data.restricted) return null;
   const content = data.content.filter((item): item is Counts => item !== null);
   const complete = data.content.every(Boolean) && data.content.length === 4;
   const trend = data.dates.map((date, i) => ({ date, count: content.reduce((sum, item) => sum + item.trend[i], 0) }));
-  const previous = trend.slice(0, 7).reduce((sum, item) => sum + item.count, 0);
-  const recent = trend.slice(7).reduce((sum, item) => sum + item.count, 0);
+  const completedTrend = trend.slice(0, -1);
+  const previous = completedTrend.slice(0, 7).reduce((sum, item) => sum + item.count, 0);
+  const recent = completedTrend.slice(7).reduce((sum, item) => sum + item.count, 0);
   const top = data.top.flatMap(item => item ?? []).sort((a, b) => b.votes - a.votes).slice(0, 5);
   const partialTop = data.top.length !== 3 || data.top.some(item => item === null);
   const period = (value: Period | null) => value ? `${value.recent.toLocaleString()} / ${value.previous.toLocaleString()}` : t('studio.dashboard.unavailable');
@@ -70,7 +75,7 @@ export function DashboardInsights() {
           )}
         </div>
         {complete ? (
-          <DashboardTrendChart points={trend} label={t('studio.dashboard.contentTrend')} pointLabel="studio.dashboard.contentPoint" />
+        <DashboardTrendChart points={trend} ongoingDate={data.dates[data.dates.length - 1]} label={t('studio.dashboard.contentTrend')} pointLabel="studio.dashboard.contentPoint" />
         ) : <p className="dashboard-empty-label">{t('studio.dashboard.unavailable')}</p>}
       </section>
       <section className="dashboard-panel">
@@ -119,6 +124,23 @@ export function DashboardInsights() {
           </Link>
         </div>
       </section>
+    </div>
+  );
+}
+
+function DashboardInsightsSkeleton({ label }: { label: string }) {
+  return (
+    <div className="dashboard-extra dashboard-insights-skeleton" role="status" aria-label={label} aria-busy="true">
+      {Array.from({ length: 5 }, (_, index) => (
+        <section className="dashboard-panel" key={index} aria-hidden="true">
+          <span className="dashboard-skeleton-block dashboard-skeleton-title" />
+          <div className="dashboard-skeleton-list">
+            {Array.from({ length: index === 1 ? 5 : 3 }, (_, row) => (
+              <span className="dashboard-skeleton-block dashboard-skeleton-row" key={row} />
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

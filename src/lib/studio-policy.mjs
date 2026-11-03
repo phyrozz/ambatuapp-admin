@@ -1,7 +1,7 @@
 export const ROLE_TYPES = ['view', 'add', 'edit', 'delete', 'upload', 'download'];
 export const STUDIO_MODULES = [
   { id: 'dashboard', href: '/dashboard', key: 'studio.modules.dashboard' },
-  { id: 'characters', href: '/', key: 'studio.modules.characters' },
+  { id: 'characters', href: '/characters', key: 'studio.modules.characters' },
   { id: 'lores', href: '/lores', key: 'studio.modules.lores' },
   { id: 'videos', href: '/videos', key: 'studio.modules.videos' },
   { id: 'sounds', href: '/sounds', key: 'studio.modules.sounds' },
