@@ -6,17 +6,17 @@ import { AudioLines, BookOpen, ChevronDown, Flag, Image, LayoutDashboard, LogOut
 import { signOut } from 'aws-amplify/auth';
 import { authConfigured } from '../lib/auth';
 import { STUDIO_MODULES } from '../lib/studio-policy.mjs';
-import { StudioAccessProvider, useStudioAccess } from './studio-access-provider';
+import { useStudioAccess } from './studio-access-provider';
 import { useI18n } from './studio-i18n';
 import { LoadingScreen } from './admin-ui';
 import { StudioBrand } from './studio-brand';
 const icons = [LayoutDashboard, UsersRound, BookOpen, Video, AudioLines, Image, Flag, Settings, UsersRound, ShieldCheck];
 export function AdminShell({ children, onSignedOut }: { children: React.ReactNode; onSignedOut?: () => void }) {
-  return <StudioAccessProvider><Shell onSignedOut={onSignedOut}>{children}</Shell></StudioAccessProvider>;
+  return <Shell onSignedOut={onSignedOut}>{children}</Shell>;
 }
 function Shell({ children, onSignedOut }: { children: React.ReactNode; onSignedOut?: () => void }) {
   const { t } = useI18n();
-  const { ready, denied, can, roleId, roleName, profile } = useStudioAccess();
+  const { ready, denied, can, roleId, roleName, profile, refresh } = useStudioAccess();
   const path = usePathname(), router = useRouter(), mobileMenu = useRef<HTMLDetailsElement>(null);
   const links = STUDIO_MODULES.map((module, index) => ({ ...module, Icon: icons[index] })).filter(module => can(module.id, 'view'));
   const current = STUDIO_MODULES.find(module => module.href === path);
@@ -28,7 +28,7 @@ function Shell({ children, onSignedOut }: { children: React.ReactNode; onSignedO
     document.addEventListener('pointerdown', dismiss); document.addEventListener('keydown', escape);
     return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', escape); };
   }, [path]);
-  async function logout() { if (authConfigured()) await signOut(); onSignedOut?.(); if (!onSignedOut) router.replace('/'); }
+  async function logout() { if (authConfigured()) await signOut(); await refresh(); onSignedOut?.(); if (!onSignedOut) router.replace('/'); }
   if (!ready) return <LoadingScreen/>;
   if (denied) return <main className="admin-access-denied"><section><ShieldCheck/><h1>{t('studio.access.deniedTitle')}</h1><p>{t('studio.access.denied')}</p><button className="button primary" onClick={() => void logout()}>{t('studio.common.signOut')}</button></section></main>;
   const navigation = (access: boolean) => links.filter(module => ['users', 'roles'].includes(module.id) === access).map(({ href, key, Icon }) => <Link key={href} href={href} className={path === href ? 'active' : ''} aria-current={path === href ? 'page' : undefined} onClick={close}><Icon size={18}/>{t(key)}</Link>);

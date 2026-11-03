@@ -2,10 +2,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { ImagePlus, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
-import { configureAuth, authConfigured } from '../../lib/auth';
+import { authConfigured } from '../../lib/auth';
 import { StudioAuth } from '../../components/studio-auth';
-import { studioApi } from '../../lib/studio-client';
-import { Allowed } from '../../components/studio-access-provider';
+import { Allowed, useStudioAccess } from '../../components/studio-access-provider';
 import type { Character } from '../../lib/character';
 import { AdminShell, PageHeader } from '../../components/admin-shell';
 import { EmptyState, LoadingScreen, Notice, Spinner } from '../../components/admin-ui';
@@ -17,19 +16,11 @@ async function api(path: string, options?: RequestInit) {
 }
 
 export default function Home() {
-  const [authenticated, setAuthenticated] = useState(false), [authReady, setAuthReady] = useState(false);
+  const { ready: accessReady, denied, refresh } = useStudioAccess();
   const [characters, setCharacters] = useState<Character[]>([]), [selected, setSelected] = useState<Character | null>(null), [editing, setEditing] = useState<Character | null>(null);
   const [query, setQuery] = useState(''), [status, setStatus] = useState<'All' | 'Published' | 'Draft'>('All'), [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false), [loadingMore, setLoadingMore] = useState(false), [cursor, setCursor] = useState<string | null>(null), [moreError, setMoreError] = useState(false);
   const generation = useRef(0), inFlight = useRef(false), listRef = useRef<HTMLElement>(null), sentinelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    void (async () => {
-      if (!authConfigured() || !configureAuth()) { setAuthenticated(true); setAuthReady(true); return; }
-      try { const token = (await fetchAuthSession()).tokens?.idToken; if (token) { await studioApi('/api/admin-session'); setAuthenticated(true); } }
-      catch {} finally { setAuthReady(true); }
-    })();
-  }, []);
 
   const fetchPage = useCallback(async (next: string | null, requestGeneration: number) => {
     const params = new URLSearchParams({ limit: '30' });
@@ -59,11 +50,11 @@ export default function Home() {
     finally { if (requestGeneration === generation.current) setLoading(false); }
   }, [fetchPage]);
   useEffect(() => {
-    if (!authenticated) return;
+    if (!accessReady || denied) return;
     const currentGeneration = generation;
     const timer = setTimeout(() => { void load(); }, 250);
     return () => { clearTimeout(timer); currentGeneration.current++; };
-  }, [authenticated, load]);
+  }, [accessReady, denied, load]);
   const loadMore = useCallback(async () => {
     if (!cursor || loading || inFlight.current) return;
     const requestGeneration = generation.current;
@@ -97,11 +88,11 @@ export default function Home() {
     const remaining = characters.filter(item => item.id !== character.id);
     setCharacters(remaining); setSelected(remaining[0] ?? null); setEditing(null);
   }
-  if (!authReady) return <LoadingScreen />;
-  if (!authenticated) return <StudioAuth signedIn={() => setAuthenticated(true)} />;
+  if (!accessReady) return <LoadingScreen />;
+  if (denied) return <StudioAuth signedIn={() => { void refresh(); }} />;
   const create = () => { setSelected(null); setEditing({ id: crypto.randomUUID(), name: '', title: '', bio: '', status: 'Draft', tags: [], updated: 'Just now' }); };
   return (
-    <AdminShell onSignedOut={() => setAuthenticated(false)}>
+    <AdminShell>
       <PageHeader eyebrow="AMBAVERSE / CHARACTERS" title="Characters" count={characters.length} description="Select a character to view or edit its profile." action={
         <Allowed module="characters" action="add">
           <button className="button primary" onClick={create}>

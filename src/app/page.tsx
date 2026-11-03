@@ -7,9 +7,11 @@ import { StudioAuth } from '../components/studio-auth';
 import { LoadingScreen } from '../components/admin-ui';
 import { configureAuth, authConfigured } from '../lib/auth';
 import { studioApi } from '../lib/studio-client';
+import { useStudioAccess } from '../components/studio-access-provider';
 
 export default function Home() {
   const router = useRouter();
+  const { refresh } = useStudioAccess();
   const [authReady, setAuthReady] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
 
@@ -29,6 +31,7 @@ export default function Home() {
         const token = (await fetchAuthSession()).tokens?.idToken;
         if (token) {
           await studioApi('/api/admin-session');
+          await refresh();
           if (active) setAuthenticated(true);
         }
       } catch {
@@ -42,12 +45,12 @@ export default function Home() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [refresh]);
 
   useEffect(() => {
     if (authReady && authenticated) router.replace('/dashboard');
   }, [authReady, authenticated, router]);
 
   if (!authReady || authenticated) return <LoadingScreen />;
-  return <StudioAuth signedIn={() => setAuthenticated(true)} />;
+  return <StudioAuth signedIn={() => { void refresh().then(() => setAuthenticated(true)); }} />;
 }
