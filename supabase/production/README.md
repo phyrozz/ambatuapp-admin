@@ -29,15 +29,15 @@ The older `firestore-prod.csv` was used for a **local-only** rehearsal. It is no
 
 ## Production API configuration
 
-Prepare these values in the deployment's server-side secret store; **do not set the cutover switches on the live service yet**. Use the exact host and project reference from the production project's Connect dialog and the downloaded production database CA file. For the shared session pooler, use port 5432 and the custom role username `ambatu_prod_content_reader.<project-ref>`; for a direct connection, use `db.<project-ref>.supabase.co` and `ambatu_prod_content_reader`. The API validates the project reference, role, host, port, TLS certificate, production source marker, `NODE_ENV`, and project ID.
+Prepare these values in the deployment's server-side secret store; **do not set the cutover switches on the live service yet**. Use the exact host and project reference from the production project's Connect dialog and the downloaded production database CA file. For this serverless API, use the shared transaction pooler on port 6543 with the custom role username `ambatu_prod_content_reader.<project-ref>`. The API also accepts the shared session pooler on port 5432 or a direct connection on port 5432, but those modes have lower connection headroom for horizontally scaled deployments. The API validates the project reference, role, host, port, TLS certificate, production source marker, `NODE_ENV`, and project ID.
 
 ```text
 CONTENT_READ_BACKEND=postgres-prod
 PRODUCTION_POSTGRES_CUTOVER=enabled
 FIREBASE_PROJECT_ID=ambatuapp-bcebb
 PROD_SUPABASE_PROJECT_REF=<production-project-ref>
-PROD_CONTENT_PG_HOST=<production-direct-or-session-pooler-host>
-PROD_CONTENT_PG_PORT=5432
+PROD_CONTENT_PG_HOST=<production-shared-pooler-host>
+PROD_CONTENT_PG_PORT=6543
 PROD_CONTENT_PG_USER=<production-server-role-username>
 PROD_CONTENT_PG_PASSWORD=<secret>
 PROD_CONTENT_PG_CA=<contents-of-production-database-ca-pem>

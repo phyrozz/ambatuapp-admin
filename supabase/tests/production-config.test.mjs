@@ -9,7 +9,7 @@ const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKi
 function setup(changes = {}) {
   const env = { NODE_ENV: 'production', FIREBASE_PROJECT_ID: 'ambatuapp-bcebb', CONTENT_READ_BACKEND: 'postgres-prod', PRODUCTION_POSTGRES_CUTOVER: 'enabled',
     PROD_SUPABASE_PROJECT_REF: 'testref', PROD_CONTENT_PG_HOST: 'aws-0-ap-southeast-1.pooler.supabase.com',
-    PROD_CONTENT_PG_USER: 'ambatu_prod_content_reader.testref', PROD_CONTENT_PG_PASSWORD: 'test-only', PROD_CONTENT_PG_CA_FILE: 'test-ca', ...changes };
+    PROD_CONTENT_PG_PORT: '6543', PROD_CONTENT_PG_USER: 'ambatu_prod_content_reader.testref', PROD_CONTENT_PG_PASSWORD: 'test-only', PROD_CONTENT_PG_CA_FILE: 'test-ca', ...changes };
   const queries = [], configs = [];
   class Pool {
     constructor(config) { configs.push(config); }
@@ -29,15 +29,17 @@ test('production is explicit and cannot mix Firestore and Postgres backends', ()
   for (const name of ['isDevContentSnapshot', 'isDevCharacterWriter', 'isDevLoreWriter', 'isDevSoundWriter', 'isDevVideoWriter',
     'isDevSocialWriter', 'isDevProfileWriter', 'isDevLeaderboardWriter', 'isDevRateLimitWriter', 'isDevStudioWriter']) assert.equal(api[name](), true);
 });
-test('production connection requires the correct project, role, TLS certificate, and session port', async () => {
+test('production connection requires the correct project, role, TLS certificate, and transaction pooler', async () => {
   for (const change of [{ PROD_SUPABASE_PROJECT_REF: 'wrong' }, { PROD_CONTENT_PG_USER: 'postgres.testref' }, { PROD_CONTENT_PG_HOST: 'localhost' },
-    { PROD_CONTENT_PG_HOST: 'other.example.com' }, { PROD_CONTENT_PG_CA_FILE: '' }, { PROD_CONTENT_PG_PORT: '6543' }]) {
+    { PROD_CONTENT_PG_HOST: 'other.example.com' }, { PROD_CONTENT_PG_CA_FILE: '' }]) {
     const { api, configs } = setup(change);
     await assert.rejects(api.withDevContentDb(async () => {}), /Production database target is not configured/);
     assert.equal(configs.length, 0);
   }
   const { api, queries, configs } = setup();
   await api.withDevVideoDb(async () => 'done');
+  assert.equal(configs[0].port, 6543);
+  assert.equal(configs[0].max, 1);
   assert.equal(configs[0].ssl.rejectUnauthorized, true);
   assert.equal(configs[0].ssl.ca, 'test-ca');
   assert.equal(queries[0].params[0], 'firestore-prod-v1');

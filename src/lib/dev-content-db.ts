@@ -107,12 +107,14 @@ export async function withDevContentDb<T>(callback: (client: PoolClient) => Prom
   const user = prod ? process.env.PROD_CONTENT_PG_USER : process.env.DEV_CONTENT_PG_USER;
   const password = prod ? process.env.PROD_CONTENT_PG_PASSWORD : process.env.DEV_CONTENT_PG_PASSWORD;
   const ref = process.env.PROD_SUPABASE_PROJECT_REF;
+  const port = Number((prod ? process.env.PROD_CONTENT_PG_PORT : process.env.DEV_CONTENT_PG_PORT) || 5432);
   if (!host || !user || !password) throw new Error('Content database is not configured');
   if (prod) {
+    const direct = host === `db.${ref}.supabase.co` && user === 'ambatu_prod_content_reader' && port === 5432;
+    const sharedPooler = /^aws-[0-9]+-[a-z0-9-]+\.pooler\.supabase\.com$/.test(host)
+      && user === `ambatu_prod_content_reader.${ref}` && (port === 5432 || port === 6543);
     if (!ref || !/^[a-z0-9]{1,64}$/.test(ref) || !(process.env.PROD_CONTENT_PG_CA || process.env.PROD_CONTENT_PG_CA_FILE)
-      || !((host === `db.${ref}.supabase.co` && user === 'ambatu_prod_content_reader')
-        || (/^aws-[0-9]+-[a-z0-9-]+\.pooler\.supabase\.com$/.test(host) && user === `ambatu_prod_content_reader.${ref}`))
-      || Number(process.env.PROD_CONTENT_PG_PORT || 5432) !== 5432) throw new Error('Production database target is not configured');
+      || (!direct && !sharedPooler)) throw new Error('Production database target is not configured');
   } else if (!/^ambatu_dev_content_reader(?:\.[a-z0-9]+)?$/.test(user)) {
     throw new Error('Dev content database is not configured');
   }
@@ -124,7 +126,7 @@ export async function withDevContentDb<T>(callback: (client: PoolClient) => Prom
     const ca = prod && process.env.PROD_CONTENT_PG_CA ? process.env.PROD_CONTENT_PG_CA : caPath ? readFileSync(caPath, 'utf8') : undefined;
     const ssl = local ? false : { rejectUnauthorized: true, ...(ca ? { ca } : {}) };
     pool = new Pool({ host, user, password, database: prod ? 'postgres' : process.env.DEV_CONTENT_PG_DATABASE || 'postgres',
-      port: Number((prod ? process.env.PROD_CONTENT_PG_PORT : process.env.DEV_CONTENT_PG_PORT) || 5432), max: 3, connectionTimeoutMillis: 5000,
+      port, max: prod ? 1 : 3, connectionTimeoutMillis: 5000,
       ssl, application_name: `ambatu-${mode}-content-reader` });
     poolMode = mode;
     pool.on('error', () => console.error('Content database connection lost'));
