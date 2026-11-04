@@ -7,6 +7,7 @@ import { Notice, Spinner } from '../../components/admin-ui';
 import { useI18n } from '../../components/studio-i18n';
 import { studioApi } from '../../lib/studio-client';
 import { DashboardInsights } from '../../components/dashboard-insights';
+import { DashboardCountryBreakdown } from '../../components/dashboard-country-breakdown';
 import { DashboardTrendChart } from '../../components/dashboard-trend-chart';
 
 type DashboardData = {
@@ -17,6 +18,7 @@ type DashboardData = {
   activeMonth: number;
   asOf: string;
   registrationTrend: { date: string; count: number }[];
+  registrationCountries: { country: string; count: number }[];
 };
 
 export default function DashboardPage() {
@@ -66,6 +68,7 @@ function Dashboard() {
   ] : [];
 
   const trend = data?.registrationTrend ?? [];
+  const registrationCountries = data?.registrationCountries ?? [];
   const completedTrend = trend.slice(0, -1);
   const previousWeek = completedTrend.slice(0, 7).reduce((sum, point) => sum + point.count, 0);
   const recentWeek = completedTrend.slice(7).reduce((sum, point) => sum + point.count, 0);
@@ -126,7 +129,10 @@ function Dashboard() {
               <small>{t('studio.dashboard.activityShort')}</small>
             </section>
           </div>
-          <DashboardInsights key={data.asOf} />
+          <DashboardInsights
+            key={data.asOf}
+            countryPanel={<DashboardCountryBreakdown registrationCountries={registrationCountries} />}
+          />
         </>
       )}
     </>

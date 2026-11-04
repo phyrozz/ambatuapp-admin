@@ -39,6 +39,7 @@ CREATE TABLE app.player_profiles (
   created_at timestamptz,
   updated_at timestamptz,
   last_active_at timestamptz,
+  registration_country text,
   extra jsonb NOT NULL DEFAULT '{}'
 );
 -- Claims remain authoritative during the transition. Do not silently rename duplicates.
@@ -46,6 +47,7 @@ CREATE INDEX player_username_prefix ON app.player_profiles (username_lower text_
 CREATE INDEX player_email_search ON app.player_profiles (email_search_hash, id) WHERE email_search_hash IS NOT NULL;
 CREATE INDEX player_activity ON app.player_profiles (last_active_at DESC, id);
 CREATE INDEX player_avatar ON app.player_profiles (avatar_id) WHERE avatar_id IS NOT NULL;
+CREATE INDEX player_registration_country ON app.player_profiles (registration_country) WHERE registration_country IS NOT NULL;
 CREATE TABLE app.username_claims (
   username_lower text PRIMARY KEY,
   player_id text NOT NULL,

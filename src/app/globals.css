@@ -221,6 +221,19 @@ a.dashboard-content-row:hover{color:#b54b2b}
 .dashboard-popular-title small{display:block;color:#858792;font-size:11px;margin-top:3px}
 .dashboard-panel-subtitle{margin:7px 0 0}.dashboard-footnote{display:block;margin-top:14px}.dashboard-empty-label{margin-top:24px}.dashboard-insight-status{margin-top:16px}
 @media(max-width:760px){.dashboard-extra{grid-template-columns:1fr}}
+.dashboard-country-heading{display:flex;align-items:center;gap:12px;min-width:0}
+.dashboard-country-heading .dashboard-icon{width:36px;height:36px}
+.dashboard-country-heading p{color:#727584;font-size:12px;line-height:1.5;margin:7px 0 0}
+.dashboard-country-total{display:grid;gap:3px;text-align:right;flex:none}
+.dashboard-country-total strong{font-size:24px;line-height:1;letter-spacing:-.03em}
+.dashboard-country-total span{font-size:11px;color:#727584}
+.dashboard-country-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 28px;list-style:none;margin:22px 0 0;padding:0;max-height:370px;overflow:auto}
+.dashboard-country-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:13px}
+.dashboard-country-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dashboard-country-row strong{font-size:13px;white-space:nowrap}
+.dashboard-country-track{height:5px;margin-top:7px;border-radius:99px;background:#f1e9e4;overflow:hidden}
+.dashboard-country-track span{display:block;height:100%;border-radius:inherit;background:#dc7048}
+@media(max-width:600px){.dashboard-country-list{grid-template-columns:1fr;gap:12px}.dashboard-country-heading{align-items:flex-start}.dashboard-country-total strong{font-size:20px}}
 .dashboard-chart-wrap{margin-top:14px}
 .dashboard-chart-readout{display:flex;justify-content:space-between;gap:8px;align-items:baseline;min-height:20px;color:#727584;font-size:12px}
 .dashboard-chart-readout strong{color:#b54b2b;font-size:15px}

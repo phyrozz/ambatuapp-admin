@@ -7,6 +7,7 @@ import { requirePlayer } from '../../../../../lib/player-auth';
 import { profileAvatarUrl } from '../../../../../lib/profile-avatars';
 import { FieldValue } from 'firebase-admin/firestore';
 import { emailSearchKey, normalizeCreatorQuery } from '../../../../../lib/creator-search';
+import { registrationCountryForRequest } from '../../../../../lib/registration-country';
 
 async function profileResult(id: string, profile: FirebaseFirestore.DocumentData | undefined, fallback: string) {
   const moderation = await adminDb!.collection('profileAvatarModeration').doc(id).get();
@@ -26,7 +27,8 @@ export async function POST(request: Request) {
   try {
     if (!adminDb && !isDevProfileWriter()) throw new Error('Player profile service is not configured.');
     const player = await requirePlayer(request);
-    if (isDevProfileWriter()) return NextResponse.json(await initializeProfile(player.id, player.email, player.emailVerified ? emailSearchKey(player.email) : null), { headers });
+    const registrationCountry = registrationCountryForRequest(request) ?? 'ZZ';
+    if (isDevProfileWriter()) return NextResponse.json(await initializeProfile(player.id, player.email, player.emailVerified ? emailSearchKey(player.email) : null, registrationCountry), { headers });
     const profiles = adminDb!.collection('playerProfiles');
     const claims = adminDb!.collection('playerUsernameClaims');
     const profileRef = profiles.doc(player.id);
@@ -62,7 +64,11 @@ export async function POST(request: Request) {
         if (claim.exists && claim.data()?.playerId !== player.id) return null;
         transaction.set(claimRef, { playerId: player.id });
         const birthDate = current.data()?.birthDate ?? null;
-        transaction.set(profileRef, { username, usernameLower, birthDate, ...identity, createdAt: current.data()?.createdAt ?? new Date(), updatedAt: new Date() }, { merge: true });
+        transaction.set(profileRef, { username, usernameLower, birthDate, ...identity, createdAt: current.data()?.createdAt ?? new Date(), updatedAt: new Date(), ...(current.exists ? {} : { registrationCountry }) }, { merge: true });
+        if (!current.exists) {
+          const countryCountRef = adminDb!.collection('dashboardRegistrationCountryCounts').doc(registrationCountry);
+          transaction.set(countryCountRef, { count: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        }
         return { username, birthDate, avatarType: current.data()?.avatarType ?? null, avatarId: current.data()?.avatarId ?? null, avatarKey: current.data()?.avatarKey ?? null };
       });
       if (result) return NextResponse.json(await profileResult(player.id, result, player.email.split('@')[0] || 'Player'), { headers });

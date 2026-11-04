@@ -57,7 +57,7 @@ export async function updateProfile(id: string, username: string, birthDate: str
   });
   return { username, birthDate, ...(bio === undefined ? {} : { bio }) };
 }
-export async function initializeProfile(id: string, email: string, emailHash: string | null) {
+export async function initializeProfile(id: string, email: string, emailHash: string | null, registrationCountry: string) {
   const row = await withDevProfileDb(async db => {
     await lockProfile(db, id);
     const current = await getRow(db, id);
@@ -68,9 +68,9 @@ export async function initializeProfile(id: string, email: string, emailHash: st
     for (let attempt = 0; attempt < 5; attempt++) {
       const username = `thughunter_${randomBytes(7).toString('hex').slice(0, 13)}`;
       if (!await claimName(db, id, username)) continue;
-      await db.query(`INSERT INTO app.player_profiles (id,username,username_lower,email_search_hash,created_at,updated_at) VALUES ($1,$2,$2,$3,now(),now())
+      await db.query(`INSERT INTO app.player_profiles (id,username,username_lower,email_search_hash,registration_country,created_at,updated_at) VALUES ($1,$2,$2,$3,$4,now(),now())
         ON CONFLICT (id) DO UPDATE SET username=EXCLUDED.username,username_lower=EXCLUDED.username_lower,email_search_hash=EXCLUDED.email_search_hash,
-        created_at=coalesce(app.player_profiles.created_at,now()),updated_at=now()`, [id, username, emailHash]);
+        created_at=coalesce(app.player_profiles.created_at,now()),updated_at=now()`, [id, username, emailHash, registrationCountry]);
       return getRow(db, id);
     }
     throw new Error('Could not assign a unique username.');
@@ -159,6 +159,8 @@ export async function dashboardCounts(now: number) {
       FROM generate_series($1::timestamptz, $2::timestamptz, interval '24 hours') AS bucket
       LEFT JOIN app.player_profiles p ON p.created_at >= bucket AND p.created_at < bucket + interval '24 hours' AND p.created_at <= $3::timestamptz
       GROUP BY bucket ORDER BY bucket`, [new Date(today - 14 * day), new Date(today), new Date(now)])).rows;
-    return { ...counts, registrationTrend: rows };
+    const registrationCountries = (await db.query<{ country: string; count: number }>(`SELECT registration_country AS country,count(*)::int AS count
+      FROM app.player_profiles WHERE registration_country IS NOT NULL GROUP BY registration_country ORDER BY count DESC,registration_country`)).rows;
+    return { ...counts, registrationTrend: rows, registrationCountries };
   });
 }

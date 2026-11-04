@@ -34,7 +34,11 @@ test('dashboard requires view access and counts the correct rolling windows', as
     'next/server': next,
     'firebase-admin/firestore': { Timestamp: { fromMillis: value => value } },
     '/api-auth': { requireAdmin: async (_request, needed) => { permission = needed; } },
-    '/studio-access': { studioDb: () => ({ collection: name => { assert.equal(name, 'playerProfiles'); return profiles; } }) },
+    '/studio-access': { studioDb: () => ({ collection: name => {
+      if (name === 'playerProfiles') return profiles;
+      assert.equal(name, 'dashboardRegistrationCountryCounts');
+      return { get: async () => ({ docs: [] }) };
+    } }) },
     '/studio-api': { studioError: error => { throw error; } },
   });
   const before = Date.now();

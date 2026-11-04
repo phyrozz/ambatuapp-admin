@@ -199,5 +199,10 @@
   "studio.dashboard.openReports": "Open chat reports",
   "studio.dashboard.pendingAvatars": "Pending avatar reviews",
   "studio.dashboard.profilePoint": "{date}: {count} new profiles",
+  "studio.dashboard.registrationCountries": "Profiles by country",
+  "studio.dashboard.registrationCountriesHelp": "Approximate country when a player profile was first initialized. Profiles initialized before tracking began are not included.",
+  "studio.dashboard.countryProfilesTracked": "Profiles tracked",
+  "studio.dashboard.countryUnknown": "Unknown or unavailable",
+  "studio.dashboard.registrationCountriesEmpty": "No registration countries recorded yet.",
   "studio.dashboard.contentPoint": "{date}: {count} new content items"
 }

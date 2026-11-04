@@ -96,11 +96,11 @@ BEGIN
   INSERT INTO app.profile_avatars
   SELECT parts[2], d->>'name', d->>'imageKey', d->>'contentType', (d->>'createdAt')::timestamptz,
     d - ARRAY['name','imageKey','contentType','createdAt'] FROM fs_source WHERE destination = 'profile_avatars';
-  INSERT INTO app.player_profiles
+  INSERT INTO app.player_profiles (id,username,username_lower,birth_date,bio,avatar_type,avatar_id,avatar_key,email_search_hash,created_at,updated_at,last_active_at,registration_country,extra)
   SELECT parts[2], d->>'username', d->>'usernameLower', (d->>'birthDate')::date, d->>'bio',
     d->>'avatarType', d->>'avatarId', d->>'avatarKey', d->>'emailSearchHash',
-    (d->>'createdAt')::timestamptz, (d->>'updatedAt')::timestamptz, (d->>'lastActiveAt')::timestamptz,
-    d - ARRAY['username','usernameLower','birthDate','bio','avatarType','avatarId','avatarKey','emailSearchHash','createdAt','updatedAt','lastActiveAt']
+    (d->>'createdAt')::timestamptz, (d->>'updatedAt')::timestamptz, (d->>'lastActiveAt')::timestamptz, d->>'registrationCountry',
+    d - ARRAY['username','usernameLower','birthDate','bio','avatarType','avatarId','avatarKey','emailSearchHash','createdAt','updatedAt','lastActiveAt','registrationCountry']
     FROM fs_source WHERE destination = 'player_profiles';
   INSERT INTO app.username_claims
   SELECT parts[2], d->>'playerId', d - 'playerId' FROM fs_source WHERE destination = 'username_claims';

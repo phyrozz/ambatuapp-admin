@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { useI18n } from './studio-i18n';
 import { studioApi } from '../lib/studio-client';
@@ -12,7 +13,7 @@ type Period = { previous: number; recent: number };
 type Insights = { restricted?: boolean; content: (Counts | null)[]; top: ({ kind: Kind; title: string | null; votes: number }[] | null)[]; comments: Period | null; follows: Period | null; avatars: number | null; reports: number | null; dates: string[] };
 const urls: Record<Kind, string> = { character: '/characters', lore: '/lores', video: '/videos', sound: '/sounds' };
 
-export function DashboardInsights() {
+export function DashboardInsights({ countryPanel }: { countryPanel: ReactNode }) {
   const { t } = useI18n();
   const [data, setData] = useState<Insights | null>(null);
   const [failed, setFailed] = useState(false);
@@ -28,9 +29,14 @@ export function DashboardInsights() {
     });
     return () => { active = false; };
   }, []);
-  if (failed) return <p className="dashboard-insight-status">{t('studio.dashboard.insightsUnavailable')}</p>;
-  if (loading) return <DashboardInsightsSkeleton label={t('studio.common.loading')} />;
-  if (!data || data.restricted) return null;
+  if (failed) return (
+    <div className="dashboard-extra">
+      {countryPanel}
+      <p className="dashboard-insight-status">{t('studio.dashboard.insightsUnavailable')}</p>
+    </div>
+  );
+  if (loading) return <DashboardInsightsSkeleton label={t('studio.common.loading')} countryPanel={countryPanel} />;
+  if (!data || data.restricted) return <div className="dashboard-extra">{countryPanel}</div>;
   const content = data.content.filter((item): item is Counts => item !== null);
   const complete = data.content.every(Boolean) && data.content.length === 4;
   const trend = data.dates.map((date, i) => ({ date, count: content.reduce((sum, item) => sum + item.trend[i], 0) }));
@@ -124,11 +130,12 @@ export function DashboardInsights() {
           </Link>
         </div>
       </section>
+      {countryPanel}
     </div>
   );
 }
 
-function DashboardInsightsSkeleton({ label }: { label: string }) {
+function DashboardInsightsSkeleton({ label, countryPanel }: { label: string; countryPanel: ReactNode }) {
   return (
     <div className="dashboard-extra dashboard-insights-skeleton" role="status" aria-label={label} aria-busy="true">
       {Array.from({ length: 5 }, (_, index) => (
@@ -141,6 +148,7 @@ function DashboardInsightsSkeleton({ label }: { label: string }) {
           </div>
         </section>
       ))}
+      {countryPanel}
     </div>
   );
 }

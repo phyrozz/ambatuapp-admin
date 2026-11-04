@@ -14,7 +14,7 @@ The project owner may prepare an empty schema once, without changing the live ap
 \i 'C:/Users/joshu/github/ambatuapp/admin/supabase/production/001_schema.sql'
 ```
 
-These scripts create schemas, tables, constraints, and RLS, but do not load data or create an application login. Do not re-run them over existing objects. Inspect errors instead of continuing. `migration_staging.firestore_documents` and `app.firestore_orphan_documents` contain private source documents; they are not client-readable.
+These scripts create schemas, tables, constraints, and RLS, but do not load data or create an application login. Do not re-run them over existing objects. If the schema was prepared before registration-country tracking was added, apply `006_registration_country.sql` after `005_server_roles.sql`. Inspect errors instead of continuing. `migration_staging.firestore_documents` and `app.firestore_orphan_documents` contain private source documents; they are not client-readable.
 
 ## Rehearsal and eventual cutover
 

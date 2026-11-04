@@ -13,13 +13,18 @@ export async function GET(request: Request) {
     if (isDevProfileWriter()) return NextResponse.json({ ...await dashboardCounts(now), asOf: new Date(now).toISOString() }, { headers: { 'Cache-Control': 'no-store' } });
     const profiles = studioDb().collection('playerProfiles');
     const since = (days: number) => Timestamp.fromMillis(now - days * 24 * 60 * 60 * 1000);
-    const [registered, newProfiles, activeDay, activeWeek, activeMonth] = await Promise.all([
+    const [registered, newProfiles, activeDay, activeWeek, activeMonth, countryCounts] = await Promise.all([
       profiles.count().get(),
       profiles.where('createdAt', '>=', since(7)).count().get(),
       profiles.where('lastActiveAt', '>=', since(1)).count().get(),
       profiles.where('lastActiveAt', '>=', since(7)).count().get(),
       profiles.where('lastActiveAt', '>=', since(30)).count().get(),
+      studioDb().collection('dashboardRegistrationCountryCounts').get(),
     ]);
+    const registrationCountries = countryCounts.docs
+      .map(doc => ({ country: doc.id, count: Number(doc.data().count) || 0 }))
+      .filter(item => /^[A-Z]{2}$/.test(item.country) && item.count > 0)
+      .sort((a, b) => b.count - a.count || a.country.localeCompare(b.country));
     // Include 14 completed Philippine days plus today's partial count.
     const day = 24 * 60 * 60 * 1000;
     const phOffset = 8 * 60 * 60 * 1000;
@@ -38,6 +43,7 @@ export async function GET(request: Request) {
       activeDay: activeDay.data().count,
       activeWeek: activeWeek.data().count,
       activeMonth: activeMonth.data().count,
+      registrationCountries,
       asOf: new Date(now).toISOString(),
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) { return studioError(error); }
