@@ -82,6 +82,13 @@ export async function getScrollVideo(playerId: string, id: string) {
   const row = await withDevVideoDb(async db => (await db.query<FeedRow>(`${feedSelect} WHERE c.kind='video' AND c.status='Published' AND c.id=$2 AND v.video_key IS NOT NULL AND v.video_key<>''`, [`user:${playerId}`, id])).rows[0]);
   return row ? scrollVideo(row) : null;
 }
+export async function getScrollVideos(playerId: string, ids: string[]) {
+  if (!ids.length) return [];
+  const rows = await withDevVideoDb(async db => (await db.query<FeedRow>(`${feedSelect} WHERE c.kind='video' AND c.status='Published'
+    AND c.id=ANY($2::text[]) AND v.video_key IS NOT NULL AND v.video_key<>''`, [`user:${playerId}`, ids])).rows);
+  const byId = new Map(rows.map(row => [row.id, row]));
+  return Promise.all(ids.flatMap(id => { const row = byId.get(id); return row ? [scrollVideo(row)] : []; }));
+}
 export async function listCreatorClips(owner: string, playerId: string, raw: string | null) {
   const own = owner === playerId, scope = `creator:${owner}:${own}`, cursor = feedCursor(raw, scope);
   const rows = await withDevVideoDb(async db => (await db.query<FeedRow>(`${feedSelect} WHERE c.kind='video' AND c.uploader_id=$2 AND ($3::boolean OR c.status='Published') AND c.created_at IS NOT NULL

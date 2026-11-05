@@ -1,52 +1,19 @@
-import { FieldPath, Timestamp } from 'firebase-admin/firestore';
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { isDevVideoWriter } from '../../../../lib/dev-content-db';
-import { listScrollVideos } from '../../../../lib/dev-videos';
-import { adminDb } from '../../../../lib/firebase-admin';
+import { listPersonalizedScroll } from '../../../../lib/personalized-scroll';
 import { requirePlayer } from '../../../../lib/player-auth';
-import { fallbackPlayerName, playerDisplayProfiles } from '../../../../lib/player-profiles';
-import { signedVideoUrl } from '../../../../lib/s3-videos';
 
 const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization', 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Cache-Control': 'no-store' };
 export function OPTIONS() { return new NextResponse(null, { headers }); }
 export async function GET(request: Request) {
   let player;
   try { player = await requirePlayer(request); } catch { return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers }); }
-  if (!adminDb && !isDevVideoWriter()) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
-  const raw = new URL(request.url).searchParams.get('cursor');
-  if (isDevVideoWriter()) {
-    try { return NextResponse.json(await listScrollVideos(player.id, raw), { headers }); }
-    catch (error) { return NextResponse.json({ error: error instanceof Error && error.message === 'INVALID_CURSOR' ? 'INVALID_CURSOR' : 'SCROLL_UNAVAILABLE' }, { status: error instanceof Error && error.message === 'INVALID_CURSOR' ? 400 : 500, headers }); }
-  }
-  let cursor: { seconds: number; nanoseconds: number; id: string } | null = null;
-  if (raw) {
-    try {
-      if (raw.length > 1024) throw new Error();
-      cursor = JSON.parse(Buffer.from(raw, 'base64url').toString());
-      if (!cursor || !Number.isSafeInteger(cursor.seconds) || cursor.seconds < 0 || cursor.seconds > 253402300799 || !Number.isInteger(cursor.nanoseconds) || cursor.nanoseconds < 0 || cursor.nanoseconds >= 1e9 || typeof cursor.id !== 'string' || !/^[\w-]{1,128}$/.test(cursor.id)) throw new Error();
-    } catch { return NextResponse.json({ error: 'INVALID_CURSOR' }, { status: 400, headers }); }
-  }
   try {
-    // Scan a bounded chronological batch. Filtering after the query avoids a new composite index.
-    let query = adminDb!.collection('videos').orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc').limit(9);
-    if (cursor) query = query.startAfter(new Timestamp(cursor.seconds, cursor.nanoseconds), cursor.id);
-    const snapshot = await query.get();
-    const page = snapshot.docs.slice(0, 8);
-    const published = page.filter(doc => doc.data().status === 'Published' && doc.data().videoKey);
-    const profiles = await playerDisplayProfiles(
-      published.map(doc => doc.data().uploaderId).filter((id): id is string => typeof id === 'string' && id !== 'admin'),
-      new Map(published.map(doc => [doc.data().uploaderId, doc.data().uploaderEmail ?? ''])),
-    );
-    const videos = await Promise.all(published.map(async doc => {
-      const data = doc.data();
-      const uploaderId = typeof data.uploaderId === 'string' && data.uploaderId !== 'admin' ? data.uploaderId : null;
-      const profile = uploaderId ? profiles.get(uploaderId) : undefined;
-      const vote = (await doc.ref.collection('votes').doc(`user:${player.id}`).get()).data()?.value;
-      return { id: doc.id, title: data.title, description: data.description ?? '', uploader: profile?.username ?? data.uploaderName ?? fallbackPlayerName(data.uploaderEmail ?? ''), uploaderId, uploaderAvatarUrl: profile?.avatarUrl ?? null, videoUrl: await signedVideoUrl(data.videoKey), downloadUrl: await signedVideoUrl(data.videoKey, `${doc.id}.mp4`), thumbnailUrl: await signedVideoUrl(data.thumbnailKey), upvotes: data.upvotes ?? 0, downvotes: data.downvotes ?? 0, commentCount: data.commentCount ?? 0, userVote: vote === 1 || vote === -1 ? vote : 0 };
-    }));
-    const last = page.at(-1);
-    const time = last?.data().createdAt;
-    const nextCursor = snapshot.size > 8 && last && time ? Buffer.from(JSON.stringify({ seconds: time.seconds, nanoseconds: time.nanoseconds, id: last.id })).toString('base64url') : null;
-    return NextResponse.json({ videos, nextCursor }, { headers });
-  } catch { return NextResponse.json({ error: 'SCROLL_UNAVAILABLE' }, { status: 500, headers }); }
+    if (!isDevVideoWriter()) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
+    const raw = new URL(request.url).searchParams.get('cursor');
+    return NextResponse.json(await listPersonalizedScroll(player.id, raw), { headers });
+  } catch (error) {
+    const invalid = error instanceof Error && error.message === 'INVALID_CURSOR';
+    return NextResponse.json({ error: invalid ? 'INVALID_CURSOR' : 'SCROLL_UNAVAILABLE' }, { status: invalid ? 400 : 500, headers });
+  }
 }
