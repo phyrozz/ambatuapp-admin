@@ -34,12 +34,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   let player: Awaited<ReturnType<typeof requirePlayer>>;
   try { player = await requirePlayer(request); }
   catch { return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers }); }
-  if (!adminDb && !isDevVideoWriter()) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
-
-  const { id } = await params;
-  if (!/^[\w-]{1,128}$/.test(id)) return NextResponse.json({ error: 'VIDEO_NOT_FOUND' }, { status: 404, headers });
-
   try {
+    if (!adminDb && !isDevVideoWriter()) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
+
+    const { id } = await params;
+    if (!/^[\w-]{1,128}$/.test(id)) return NextResponse.json({ error: 'VIDEO_NOT_FOUND' }, { status: 404, headers });
+
     if (isDevVideoWriter()) {
       if (!await allowPlayerWrite(adminDb, player.id, 'videoManage', [{ key: 'minute', max: 15, windowMs: 60_000 }, { key: 'day', max: 100, windowMs: 24 * 60 * 60_000 }])) return NextResponse.json({ error: 'RATE_LIMITED' }, { status: 429, headers });
       let body: Record<string, unknown>;
@@ -77,7 +77,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     await ref.update({ title, description, updatedAt: FieldValue.serverTimestamp() });
     return NextResponse.json({ id, title, description }, { headers });
-  } catch {
+  } catch (error) {
+    console.error('Public video update failed', error);
     return NextResponse.json({ error: 'VIDEO_UPDATE_FAILED' }, { status: 500, headers });
   }
 }
@@ -86,12 +87,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   let player: Awaited<ReturnType<typeof requirePlayer>>;
   try { player = await requirePlayer(request); }
   catch { return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers }); }
-  if (!adminDb && !isDevVideoWriter()) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
-
-  const { id } = await params;
-  if (!/^[\w-]{1,128}$/.test(id)) return NextResponse.json({ error: 'VIDEO_NOT_FOUND' }, { status: 404, headers });
-
   try {
+    if (!adminDb && !isDevVideoWriter()) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
+
+    const { id } = await params;
+    if (!/^[\w-]{1,128}$/.test(id)) return NextResponse.json({ error: 'VIDEO_NOT_FOUND' }, { status: 404, headers });
+
     if (isDevVideoWriter()) {
       if (!await allowPlayerWrite(adminDb, player.id, 'videoManage', [{ key: 'minute', max: 15, windowMs: 60_000 }, { key: 'day', max: 100, windowMs: 24 * 60 * 60_000 }])) return NextResponse.json({ error: 'RATE_LIMITED' }, { status: 429, headers });
       return await deleteManagedVideo(id, undefined, player.id) ? NextResponse.json({ ok: true }, { headers }) : NextResponse.json({ error: 'VIDEO_NOT_FOUND' }, { status: 404, headers });
@@ -121,7 +122,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     await deleteVideoAssets({ videoKey, ...(thumbnailKey ? { thumbnailKey } : {}) });
     await adminDb!.recursiveDelete(ref);
     return NextResponse.json({ ok: true }, { headers });
-  } catch {
+  } catch (error) {
+    console.error('Public video deletion failed', error);
     return NextResponse.json({ error: 'VIDEO_DELETE_FAILED' }, { status: 500, headers });
   }
 }
