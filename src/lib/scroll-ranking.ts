@@ -44,7 +44,7 @@ function jitter(playerId: string, id: string) {
 }
 const clamp = (n: number, max: number) => Math.max(-max, Math.min(max, n));
 
-export function rankScrollCandidates(candidates: ScrollCandidate[], signals: ScrollSignals, playerId: string, now = Date.now()): ScrollCandidate[] {
+export function rankScrollCandidates(candidates: ScrollCandidate[], signals: ScrollSignals, playerId: string, now = Date.now(), seed = ''): ScrollCandidate[] {
   const history = recentHistory(signals.history, now), seen = new Set(history.map(item => item.id));
   const creators = new Map<string, number>(), topics = new Map<string, number>();
   for (const item of history) {
@@ -60,7 +60,7 @@ export function rankScrollCandidates(candidates: ScrollCandidate[], signals: Scr
     const affinity = clamp(words.reduce((sum, word) => sum + (topics.get(word) ?? 0), 0) / Math.max(1, words.length), 3);
     const base = 2 / (1 + Math.max(0, now - clip.createdAt) / (7 * 86400_000))
       + clamp(Math.log1p(Math.max(0, clip.upvotes)) - Math.log1p(Math.max(0, clip.downvotes)), 2) * 0.5
-      + jitter(playerId, clip.id) * 0.75 - (seen.has(clip.id) ? 5 : 0) + (clip.vote === -1 ? -20 : clip.vote === 1 ? -2 : 0);
+      + jitter(`${playerId}:${seed}`, clip.id) * 0.75 - (seen.has(clip.id) ? 5 : 0) + (clip.vote === -1 ? -20 : clip.vote === 1 ? -2 : 0);
     return { clip, base, score: base + affinity + (clip.creator ? clamp(creators.get(clip.creator) ?? 0, 6) + (signals.following.has(clip.creator) ? 4 : 0) : 0) };
   });
   const result: ScrollCandidate[] = [], counts = new Map<string, number>();
@@ -77,7 +77,20 @@ export function rankScrollCandidates(candidates: ScrollCandidate[], signals: Scr
   return result;
 }
 
-export type ScrollCursor = { version: 1; playerId: string; backend: string; after: string | null; pending: string[]; more: boolean };
+export type ScrollRefresh = { seed: string; exclude: string[] };
+function validRefresh(seed: unknown, exclude: unknown): exclude is string[] {
+  return typeof seed === 'string' && /^[\w-]{0,64}$/.test(seed) && Array.isArray(exclude) && exclude.length <= 32
+    && exclude.every(id => typeof id === 'string' && /^[\w-]{1,128}$/.test(id))
+    && exclude.join(',').length <= 1536 && new Set(exclude).size === exclude.length;
+}
+export function parseScrollRefresh(params: URLSearchParams): ScrollRefresh {
+  const seed = params.get('seed') ?? '', raw = params.get('exclude') ?? '';
+  if (raw.length > 1536) throw new Error('INVALID_REFRESH');
+  const exclude = raw ? raw.split(',') : [];
+  if (!validRefresh(seed, exclude)) throw new Error('INVALID_REFRESH');
+  return { seed, exclude };
+}
+export type ScrollCursor = { version: 1; playerId: string; backend: string; after: string | null; pending: string[]; more: boolean; seed?: string; exclude?: string[] };
 export function parseScrollCursor(raw: string | null, playerId: string, backend: string): ScrollCursor | null {
   if (!raw) return null;
   try {
@@ -86,24 +99,32 @@ export function parseScrollCursor(raw: string | null, playerId: string, backend:
     if (c.version !== 1 || c.playerId !== playerId || c.backend !== backend || typeof c.more !== 'boolean'
       || (c.after !== null && (typeof c.after !== 'string' || c.after.length > 1024)) || (c.more && !c.after)
       || !Array.isArray(c.pending) || c.pending.length > SCROLL_WINDOW
-      || c.pending.some(id => typeof id !== 'string' || !/^[\w-]{1,128}$/.test(id)) || new Set(c.pending).size !== c.pending.length) throw new Error();
+      || c.pending.some(id => typeof id !== 'string' || !/^[\w-]{1,128}$/.test(id)) || new Set(c.pending).size !== c.pending.length
+      || !validRefresh(c.seed ?? '', c.exclude ?? [])) throw new Error();
     return c;
   } catch { throw new Error('INVALID_CURSOR'); }
 }
 
 export type ScrollRepository<T> = {
   backend: string;
-  scan: (after: string | null) => Promise<{ candidates: ScrollCandidate[]; after: string | null; more: boolean }>;
+  scan: (after: string | null, exclude: string[]) => Promise<{ candidates: ScrollCandidate[]; after: string | null; more: boolean }>;
   signals: (candidates: ScrollCandidate[]) => Promise<ScrollSignals>;
   hydrate: (ids: string[]) => Promise<T[]>;
 };
-export async function personalizedScrollPage<T>(repo: ScrollRepository<T>, playerId: string, raw: string | null) {
+export async function personalizedScrollPage<T>(repo: ScrollRepository<T>, playerId: string, raw: string | null, refresh: ScrollRefresh = { seed: '', exclude: [] }) {
   let state = parseScrollCursor(raw, playerId, repo.backend);
   if (!state || (!state.pending.length && state.more)) {
-    const window = await repo.scan(state?.after ?? null);
+    const seed = state?.seed ?? refresh.seed;
+    let exclude = state?.exclude ?? refresh.exclude;
+    let window = await repo.scan(state?.after ?? null, exclude);
+    // A small/exhausted catalog can repeat rather than making refresh look broken.
+    if (!state && exclude.length && !window.candidates.length && !window.more) {
+      exclude = [];
+      window = await repo.scan(null, exclude);
+    }
     const signals = await repo.signals(window.candidates);
-    state = { version: 1, playerId, backend: repo.backend, after: window.after, more: window.more,
-      pending: rankScrollCandidates(window.candidates, signals, playerId).map(clip => clip.id) };
+    state = { version: 1, playerId, backend: repo.backend, after: window.after, more: window.more, seed, exclude,
+      pending: rankScrollCandidates(window.candidates, signals, playerId, Date.now(), seed).map(clip => clip.id) };
   }
   const ids = state.pending.slice(0, SCROLL_BATCH);
   state.pending = state.pending.slice(SCROLL_BATCH);

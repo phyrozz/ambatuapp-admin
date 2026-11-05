@@ -47,9 +47,19 @@ test('feed uses PostgreSQL only, validates cursors, and supports uncached browse
   const f = fixture();
   const result = await f.feed.GET(new Request('https://local.invalid/scroll?cursor=abc'));
   assert.equal(result.status, 200);
-  assert.deepEqual(f.calls[0], ['verified-player', 'abc']);
+  assert.deepEqual(f.calls[0], ['verified-player', 'abc', undefined]);
   assert.equal(result.headers.get('cache-control'), 'no-store');
   assert.equal(f.watch.OPTIONS().headers.get('access-control-allow-methods'), 'POST, OPTIONS');
   assert.equal((await fixture({ invalidCursor: true }).feed.GET(new Request('https://local.invalid/scroll?cursor=bad'))).status, 400);
   assert.equal((await fixture({ enabled: false }).feed.GET(new Request('https://local.invalid/scroll'))).status, 503);
+});
+
+test('refresh accepts a bounded seed/exclusion list and rejects malformed inputs', async () => {
+  const f = fixture();
+  assert.equal((await f.feed.GET(new Request('https://local.invalid/scroll?seed=refresh-one&exclude=clip-one,clip-two'))).status, 200);
+  assert.deepEqual(JSON.parse(JSON.stringify(f.calls[0])), ['verified-player', null, { seed: 'refresh-one', exclude: ['clip-one', 'clip-two'] }]);
+  for (const query of ['seed=bad%20seed', 'exclude=clip,clip', `exclude=${Array.from({ length: 33 }, (_, i) => `clip-${i}`).join(',')}`]) {
+    assert.equal((await f.feed.GET(new Request(`https://local.invalid/scroll?${query}`))).status, 400);
+  }
+  assert.equal(f.calls.length, 1);
 });

@@ -87,3 +87,35 @@ test('empty and wholly unpublished remaining pages terminate without looping', a
   const result = await personalizedScrollPage({ backend: 'postgres', scan: async () => ({ candidates: [], after: null, more: false }), signals: async () => signals(), hydrate: async () => [] }, 'one', null);
   assert.deepEqual(result, { videos: [], nextCursor: null });
 });
+
+test('refresh excludes recent contents across cursor windows and preserves its ranking seed', async () => {
+  const clips = Array.from({ length: 60 }, (_, i) => clip(`clip-${i}`));
+  const scans = [];
+  const repo = { backend: 'postgres', scan: async (after, exclude) => {
+    scans.push([...exclude]);
+    const eligible = clips.filter(item => !exclude.includes(item.id));
+    const start = Number(after ?? 0);
+    return { candidates: eligible.slice(start, start + 24), after: String(start + 24), more: eligible.length > start + 24 };
+  }, signals: async () => signals(), hydrate: async ids => ids };
+  const original = await personalizedScrollPage(repo, 'one', null);
+  const refresh = { seed: 'new-session', exclude: original.videos };
+  let page = await personalizedScrollPage(repo, 'one', null, refresh);
+  const state = parseScrollCursor(page.nextCursor, 'one', 'postgres');
+  assert.equal(state.seed, refresh.seed);
+  assert.deepEqual(state.exclude, refresh.exclude);
+  const all = [...page.videos];
+  while (page.nextCursor) {
+    page = await personalizedScrollPage(repo, 'one', page.nextCursor);
+    all.push(...page.videos);
+  }
+  assert.equal(all.length, 52);
+  assert.equal(new Set(all).size, 52);
+  assert(all.every(id => !original.videos.includes(id)));
+  assert(scans.slice(1).every(exclude => JSON.stringify(exclude) === JSON.stringify(refresh.exclude)));
+});
+
+test('refresh falls back to available contents when all clips are excluded', async () => {
+  const repo = { backend: 'postgres', scan: async (_after, exclude) => ({ candidates: exclude.includes('only') ? [] : [clip('only')], after: null, more: false }),
+    signals: async () => signals(), hydrate: async ids => ids };
+  assert.deepEqual(await personalizedScrollPage(repo, 'one', null, { seed: 'refresh', exclude: ['only'] }), { videos: ['only'], nextCursor: null });
+});

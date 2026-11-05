@@ -1,7 +1,7 @@
 import { withDevSocialDb, withDevVideoDb } from './dev-content-db';
 import { getScrollVideos } from './dev-videos';
 import { mergeScrollHistory, personalizedScrollPage, recentHistory, scrollTopics, SCROLL_WINDOW,
-  type ScrollCandidate, type ScrollHistory, type ScrollSignals, type WatchSignal } from './scroll-ranking';
+  type ScrollCandidate, type ScrollHistory, type ScrollRefresh, type ScrollSignals, type WatchSignal } from './scroll-ranking';
 
 type CandidateRow = { id: string; uploader_id: string | null; title: string | null; description: string | null;
   created_at: Date; cursor_time: string; upvotes: string; downvotes: string; user_vote: number | null };
@@ -24,12 +24,13 @@ function boundary(raw: string | null): { time: string; id: string } | null {
   } catch { throw new Error('INVALID_CURSOR'); }
 }
 
-export async function scrollCandidateWindow(playerId: string, after: string | null) {
+export async function scrollCandidateWindow(playerId: string, after: string | null, exclude: string[] = []) {
   const cursor = boundary(after);
   const rows = await withDevVideoDb(async db => (await db.query<CandidateRow>(`${candidateSelect}
     AND ($2::timestamptz IS NULL OR (c.created_at,c.id COLLATE "C")<($2::timestamptz,$3 COLLATE "C"))
+    AND NOT (c.id=ANY($5::text[]))
     ORDER BY c.created_at DESC,c.id COLLATE "C" DESC LIMIT $4`,
-  [`user:${playerId}`, cursor?.time ?? null, cursor?.id ?? null, SCROLL_WINDOW + 1])).rows);
+  [`user:${playerId}`, cursor?.time ?? null, cursor?.id ?? null, SCROLL_WINDOW + 1, exclude])).rows);
   const page = rows.slice(0, SCROLL_WINDOW), last = page.at(-1);
   return { candidates: page.map(candidate), after: last ? JSON.stringify({ time: last.cursor_time, id: last.id }) : null, more: rows.length > SCROLL_WINDOW };
 }
@@ -62,9 +63,9 @@ export async function scrollSignals(playerId: string, candidates: ScrollCandidat
   return { ...preferences, following: new Set(following.map(row => row.followed_id)) };
 }
 
-export function listPersonalizedScroll(playerId: string, raw: string | null) {
-  return personalizedScrollPage({ backend: 'postgres', scan: after => scrollCandidateWindow(playerId, after),
-    signals: candidates => scrollSignals(playerId, candidates), hydrate: ids => getScrollVideos(playerId, ids) }, playerId, raw);
+export function listPersonalizedScroll(playerId: string, raw: string | null, refresh?: ScrollRefresh) {
+  return personalizedScrollPage({ backend: 'postgres', scan: (after, exclude) => scrollCandidateWindow(playerId, after, exclude),
+    signals: candidates => scrollSignals(playerId, candidates), hydrate: ids => getScrollVideos(playerId, ids) }, playerId, raw, refresh);
 }
 
 export async function recordScrollWatch(playerId: string, id: string, signal: WatchSignal) {

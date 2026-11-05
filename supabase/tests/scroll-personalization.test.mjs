@@ -40,6 +40,11 @@ test('PostgreSQL personalization persists per account, handles concurrency and p
     const cold = await service.listPersonalizedScroll(alice, null);
     assert.equal(cold.videos.length, 8);
     assert.equal(cold.videos[0].uploaderId, bob);
+    const refreshed = await service.listPersonalizedScroll(alice, null, { seed: 'refresh-test', exclude: cold.videos.map(item => item.id) });
+    assert.equal(refreshed.videos.length, 8);
+    assert(refreshed.videos.every(item => !cold.videos.some(prior => prior.id === item.id)));
+    const resumed = await service.listPersonalizedScroll(alice, refreshed.nextCursor);
+    assert(resumed.videos.every(item => !cold.videos.some(prior => prior.id === item.id) && !refreshed.videos.some(prior => prior.id === item.id)));
     assert.equal(await service.recordScrollWatch(alice, ids[52], { watchedMs: 1000, durationMs: 10000 }), false);
     assert.equal(await service.recordScrollWatch(alice, 'missing', { watchedMs: 1000, durationMs: 10000 }), false);
     await Promise.all(ids.slice(0, 12).map(id => service.recordScrollWatch(alice, id, { watchedMs: 9000, durationMs: 10000 })));
