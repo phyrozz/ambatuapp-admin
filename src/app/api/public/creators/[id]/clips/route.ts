@@ -7,6 +7,7 @@ import { requirePlayer } from '../../../../../../lib/player-auth';
 import { validFriendId } from '../../../../../../lib/friend-list';
 import { creatorHeaders as headers } from '../../../../../../lib/creator-profile';
 import { signedVideoUrl } from '../../../../../../lib/s3-videos';
+import { hiddenPlayerIds } from '../../../../../../lib/player-blocks';
 
 export function OPTIONS() { return new NextResponse(null, { headers }); }
 
@@ -18,6 +19,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const db = adminDb;
   if (!db && !(isDevVideoWriter())) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
   const own = id === player.id;
+  try {
+    if ((await hiddenPlayerIds(player.id, [id])).has(id)) return NextResponse.json({ error: 'PLAYER_NOT_FOUND' }, { status: 404, headers });
+  } catch { return NextResponse.json({ error: 'CLIPS_UNAVAILABLE' }, { status: 503, headers }); }
   const raw = new URL(request.url).searchParams.get('cursor');
   if (isDevVideoWriter()) {
     try { return NextResponse.json(await listCreatorClips(id, player.id, raw), { headers }); }

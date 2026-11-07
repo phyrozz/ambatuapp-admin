@@ -101,7 +101,7 @@ function fixture() {
       if (specifier.startsWith('node:')) return require(specifier);
       throw new Error(`Unmocked dependency: ${specifier}`);
     }
-    vm.runInNewContext(`(function(require, module, exports) { ${code}\n})`, { Response, Request, URL, Buffer, console, Date, Error })(mockedRequire, compiledModule, compiledModule.exports);
+    vm.runInNewContext(`(function(require, module, exports) { ${code}\n})`, { Response, Request, URL, Buffer, console, Date, Error, process: { env: {} } })(mockedRequire, compiledModule, compiledModule.exports);
     return compiledModule.exports;
   }
   const request = (viewer, route, body) => new Request(`https://fixture.invalid/api/public${route}`, { headers:{ authorization:`Bearer ${viewer}`, 'content-type':'application/json' }, ...(body ? { method:'POST', body:JSON.stringify(body) } : {}) });

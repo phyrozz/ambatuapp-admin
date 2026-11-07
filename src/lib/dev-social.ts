@@ -3,6 +3,7 @@ import { withDevSocialDb } from './dev-content-db';
 import { friendTransition, type FriendState } from './friend-state';
 import { followTransition, reciprocalFriendState, type FollowAction } from './follow-state';
 import { nextFriendCursor, type FriendFilter } from './friend-list';
+import { assertNoPlayerBlock } from './player-blocks';
 
 type Relation = { state: FriendState; pinned: boolean };
 async function lockPair(db: PoolClient, first: string, second: string) {
@@ -22,6 +23,7 @@ async function deletePair(db: PoolClient, playerId: string, otherId: string) {
 export async function changeFriend(playerId: string, otherId: string, action: 'request' | 'accept' | 'remove' | 'pin' | 'unpin') {
   return withDevSocialDb(async db => {
     await lockPair(db, playerId, otherId);
+    if (action !== 'remove') await assertNoPlayerBlock(db, playerId, otherId);
     const current = await getRelation(db, playerId, otherId);
     if (action === 'pin' || action === 'unpin') {
       if (current?.state !== 'accepted') throw new Error('INVALID_FRIEND_TRANSITION');
@@ -37,6 +39,7 @@ export async function changeFriend(playerId: string, otherId: string, action: 'r
 export async function changeFollow(playerId: string, otherId: string, action: FollowAction) {
   return withDevSocialDb(async db => {
     await lockPair(db, playerId, otherId);
+    if (action !== 'unfollow') await assertNoPlayerBlock(db, playerId, otherId);
     const current = await getRelation(db, playerId, otherId);
     const exists = Boolean((await db.query('SELECT 1 FROM app.follows WHERE follower_id=$1 AND followed_id=$2', [playerId, otherId])).rowCount);
     const next = followTransition(exists, current?.state ?? null, action);

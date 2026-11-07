@@ -8,11 +8,13 @@ import { playerDisplayProfiles } from '../../../../../lib/player-profiles';
 import { validFriendId } from '../../../../../lib/friend-list';
 import { creatorHeaders as headers } from '../../../../../lib/creator-profile';
 import { normalizeCreatorQuery, creatorSearchMode, emailSearchKey } from '../../../../../lib/creator-search';
+import { hiddenPlayerIds } from '../../../../../lib/player-blocks';
 
 export function OPTIONS() { return new NextResponse(null, { headers }); }
 
 export async function GET(request: Request) {
-  try { await requirePlayer(request); } catch { return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers }); }
+  let player;
+  try { player = await requirePlayer(request); } catch { return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers }); }
   const db = adminDb;
   if (!db && !(isDevProfileWriter())) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
   const params = new URL(request.url).searchParams;
@@ -32,8 +34,9 @@ export async function GET(request: Request) {
   try {
     if (isDevProfileWriter()) {
       const rows = await searchProfiles(mode, queryKey, cursor), page = rows.slice(0, 15), last = page.at(-1);
+      const hidden = await hiddenPlayerIds(player.id, page.map(row => row.id));
       const display = await playerDisplayProfiles(page.map(row => row.id), new Map());
-      return NextResponse.json({ players: page.map(row => ({ id: row.id, ...display.get(row.id) })), nextCursor: rows.length > 15 && last ? Buffer.from(JSON.stringify({ query: queryKey, name: last.username_lower ?? '', id: last.id })).toString('base64url') : null }, { headers });
+      return NextResponse.json({ players: page.filter(row => !hidden.has(row.id)).map(row => ({ id: row.id, ...display.get(row.id) })), nextCursor: rows.length > 15 && last ? Buffer.from(JSON.stringify({ query: queryKey, name: last.username_lower ?? '', id: last.id })).toString('base64url') : null }, { headers });
     }
     const profiles = db!.collection('playerProfiles');
     let query = mode === 'email'
@@ -42,10 +45,11 @@ export async function GET(request: Request) {
     if (cursor) query = mode === 'email' ? query.startAfter(cursor.id) : query.startAfter(cursor.name, cursor.id);
     const snapshot = await query.get();
     const page = snapshot.docs.slice(0, 15);
+    const hidden = await hiddenPlayerIds(player.id, page.map(doc => doc.id));
     const display = await playerDisplayProfiles(page.map(doc => doc.id), new Map());
     const last = page.at(-1);
     return NextResponse.json({
-      players: page.map(doc => ({ id: doc.id, ...display.get(doc.id) })),
+      players: page.filter(doc => !hidden.has(doc.id)).map(doc => ({ id: doc.id, ...display.get(doc.id) })),
       nextCursor: snapshot.size > 15 && last ? Buffer.from(JSON.stringify({ query: queryKey, name: last.data().usernameLower ?? '', id: last.id })).toString('base64url') : null,
     }, { headers });
   } catch { return NextResponse.json({ error: 'SEARCH_FAILED' }, { status: 500, headers }); }

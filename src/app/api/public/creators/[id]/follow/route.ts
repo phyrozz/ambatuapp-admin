@@ -28,7 +28,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!(isDevProfileWriter() ? await getProfilePublic(id) : (await db!.collection('playerProfiles').doc(id).get()).exists)) throw new Error('PLAYER_NOT_FOUND');
       const result = await changeFollow(player.id, id, action as FollowAction);
       if (result.notify) {
-        try { const sender = (await playerDisplayProfiles([player.id], new Map([[player.id, player.email]]))).get(player.id); await notifyFriendRequest(id, sender?.username ?? player.email.split('@')[0]); }
+        try { const sender = (await playerDisplayProfiles([player.id], new Map([[player.id, player.email]]))).get(player.id); await notifyFriendRequest(id, sender?.username ?? player.email.split('@')[0], player.id); }
         catch (error) { console.error('Friend request push unavailable:', error); }
       }
       return NextResponse.json(await creatorProfile(db, id, player.id), { headers });
@@ -61,7 +61,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (result.notify) {
       try {
         const sender = (await playerDisplayProfiles([player.id], new Map([[player.id, player.email]]))).get(player.id);
-        await notifyFriendRequest(id, sender?.username ?? player.email.split('@')[0]);
+        await notifyFriendRequest(id, sender?.username ?? player.email.split('@')[0], player.id);
       } catch (error) { console.error('Friend request push unavailable:', error); }
     }
     return NextResponse.json(await creatorProfile(db, id, player.id), { headers });

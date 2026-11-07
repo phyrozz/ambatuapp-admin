@@ -7,6 +7,7 @@ import { adminDb } from '../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../lib/player-auth';
 import { playerDisplayProfiles } from '../../../../../lib/player-profiles';
 import { friendFilter, matchesFriendFilter, type FriendFilter } from '../../../../../lib/friend-list';
+import { hiddenPlayerIds } from '../../../../../lib/player-blocks';
 
 const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization', 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Cache-Control': 'no-store' };
 export function OPTIONS() { return new NextResponse(null, { headers }); }
@@ -32,7 +33,8 @@ export async function GET(request: Request) {
   try {
     if (isDevProfileWriter()) {
       const rows = await searchProfiles('username', q, cursor), page = rows.slice(0, 15), last = page.at(-1);
-      const ids = page.filter(row => row.id !== player.id).map(row => row.id);
+      const hidden = await hiddenPlayerIds(player.id, page.map(row => row.id));
+      const ids = page.filter(row => row.id !== player.id && !hidden.has(row.id)).map(row => row.id);
       const [profiles, relationships] = await Promise.all([playerDisplayProfiles(ids, new Map()), friendRelationships(player.id, ids)]);
       const friends = ids.map(id => ({ id, ...profiles.get(id), state: relationships.get(id)?.state ?? null, pinned: relationships.get(id)?.pinned === true })).filter(item => matchesFriendFilter(item, filter));
       return NextResponse.json({ friends, nextCursor: rows.length > 15 && last ? Buffer.from(JSON.stringify({ q, name: last.username_lower, id: last.id, ...filter })).toString('base64url') : null }, { headers });
@@ -41,7 +43,8 @@ export async function GET(request: Request) {
     if (cursor) query = query.startAfter(cursor.name, cursor.id);
     const snapshot = await query.get();
     const page = snapshot.docs.slice(0, 15);
-    const ids = page.filter(doc => doc.id !== player.id).map(doc => doc.id);
+    const hidden = await hiddenPlayerIds(player.id, page.map(doc => doc.id));
+    const ids = page.filter(doc => doc.id !== player.id && !hidden.has(doc.id)).map(doc => doc.id);
     const profiles = await playerDisplayProfiles(ids, new Map());
     const relationships = isDevSocialWriter() ? await friendRelationships(player.id, ids) : null;
     const results = await Promise.all(ids.map(async id => {

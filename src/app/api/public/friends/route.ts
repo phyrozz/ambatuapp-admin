@@ -9,6 +9,7 @@ import { playerDisplayProfiles } from '../../../../lib/player-profiles';
 import { friendTransition, type FriendState } from '../../../../lib/friend-state';
 import { notifyFriendRequest } from '../../../../lib/friend-push';
 import { friendFilter, friendCursor, nextFriendCursor, matchesFriendFilter, validFriendId, type FriendFilter } from '../../../../lib/friend-list';
+import { hiddenPlayerIds } from '../../../../lib/player-blocks';
 
 const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type, authorization', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Cache-Control': 'no-store' };
 export function OPTIONS() { return new NextResponse(null, { headers }); }
@@ -26,7 +27,8 @@ export async function GET(request: Request) {
     if (isDevSocialWriter()) {
       const page = await listFriends(player.id, filter, cursor);
       const profiles = await playerDisplayProfiles(page.rows.map(row => row.other_player_id), new Map());
-      return NextResponse.json({ friends: page.rows.map(row => ({ id: row.other_player_id, ...profiles.get(row.other_player_id), state: row.state, pinned: row.pinned })), nextCursor: page.nextCursor }, { headers });
+      const hidden = await hiddenPlayerIds(player.id, page.rows.map(row => row.other_player_id));
+      return NextResponse.json({ friends: page.rows.filter(row => !hidden.has(row.other_player_id)).map(row => ({ id: row.other_player_id, ...profiles.get(row.other_player_id), state: row.state, pinned: row.pinned })), nextCursor: page.nextCursor }, { headers });
     }
     let query = adminDb!.collection('playerProfiles').doc(player.id).collection('friends').orderBy(FieldPath.documentId()).limit(21);
     if (filter.pinned) query = query.where('pinned', '==', true);
@@ -52,7 +54,7 @@ export async function POST(request: Request) {
       if (action !== 'remove' && !(isDevProfileWriter() ? await getProfilePublic(targetId) : (await db!.collection('playerProfiles').doc(targetId).get()).exists)) throw new Error('PLAYER_NOT_FOUND');
       const result = await changeFriend(player.id, targetId, action);
       if (result.notify) {
-        try { const sender = (await playerDisplayProfiles([player.id], new Map([[player.id, player.email]]))).get(player.id); await notifyFriendRequest(targetId, sender?.username ?? player.email.split('@')[0]); }
+        try { const sender = (await playerDisplayProfiles([player.id], new Map([[player.id, player.email]]))).get(player.id); await notifyFriendRequest(targetId, sender?.username ?? player.email.split('@')[0], player.id); }
         catch (error) { console.error('Friend request push unavailable:', error); }
       }
       return NextResponse.json({ state: result.state, pinned: result.pinned }, { headers });
@@ -76,7 +78,7 @@ export async function POST(request: Request) {
     if (result.notify) {
       try {
         const sender = (await playerDisplayProfiles([player.id], new Map([[player.id, player.email]]))).get(player.id);
-        await notifyFriendRequest(targetId, sender?.username ?? player.email.split('@')[0]);
+        await notifyFriendRequest(targetId, sender?.username ?? player.email.split('@')[0], player.id);
       }
       catch (error) { console.error('Friend request push unavailable:', error); }
     }

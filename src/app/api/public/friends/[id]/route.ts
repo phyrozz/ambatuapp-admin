@@ -6,6 +6,7 @@ import { adminDb } from '../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../lib/player-auth';
 import { playerDisplayProfiles } from '../../../../../lib/player-profiles';
 import { validFriendId } from '../../../../../lib/friend-list';
+import { hiddenPlayerIds } from '../../../../../lib/player-blocks';
 
 const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization', 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Cache-Control': 'no-store' };
 export function OPTIONS() { return new NextResponse(null, { headers }); }
@@ -18,6 +19,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const db = adminDb;
   if (!db && !(isDevProfileWriter() && isDevSocialWriter())) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
   try {
+    if ((await hiddenPlayerIds(player.id, [id])).has(id)) return NextResponse.json({ error: 'PLAYER_NOT_FOUND' }, { status: 404, headers });
     const [target, relationship] = await Promise.all([isDevProfileWriter() ? getProfilePublic(id).then(Boolean) : db!.collection('playerProfiles').doc(id).get().then(doc => doc.exists), isDevSocialWriter() ? friendRelationships(player.id, [id]).then(rows => rows.get(id)) : db!.collection('playerProfiles').doc(player.id).collection('friends').doc(id).get().then(doc => doc.data())]);
     if (!target) return NextResponse.json({ error: 'PLAYER_NOT_FOUND' }, { status: 404, headers });
     const profile = (await playerDisplayProfiles([id], new Map())).get(id);

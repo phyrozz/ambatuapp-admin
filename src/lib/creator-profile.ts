@@ -4,6 +4,7 @@ import { isDevProfileWriter, isDevSocialWriter, isDevVideoWriter } from './dev-c
 import { getProfilePublic } from './dev-profiles';
 import { creatorClipCount } from './dev-videos';
 import { socialCounts } from './dev-social';
+import { hiddenPlayerIds } from './player-blocks';
 
 export const creatorHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,6 +15,7 @@ export const creatorHeaders = {
 
 /** Explicit public allowlist: email, birthday, avatar keys and moderation records stay private. */
 export async function creatorProfile(db: Firestore | null, id: string, viewerId: string) {
+  if ((await hiddenPlayerIds(viewerId, [id])).has(id)) throw new Error('PLAYER_NOT_FOUND');
   if (!db) {
     if (!(isDevProfileWriter() && isDevSocialWriter() && isDevVideoWriter())) throw new Error('PROFILE_UNAVAILABLE');
     const profile = await getProfilePublic(id);

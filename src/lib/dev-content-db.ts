@@ -283,3 +283,19 @@ export async function withDevStudioDb<T>(callback: (client: PoolClient) => Promi
     }
   });
 }
+
+export async function withDreamDb<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
+  if (!isDevSocialWriter() || !isDevProfileWriter()) throw new Error('Dream PostgreSQL dependencies are not enabled');
+  return withDevContentDb(async client => {
+    await client.query('BEGIN');
+    try {
+      await client.query(isProductionPostgres() ? 'SET LOCAL ROLE ambatu_prod_dream_writer' : 'SET LOCAL ROLE ambatu_dev_dream_writer');
+      const result = await callback(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* Preserve original failure. */ }
+      throw error;
+    }
+  });
+}

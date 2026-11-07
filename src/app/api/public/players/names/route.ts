@@ -4,6 +4,7 @@ import { getExplicitProfiles } from '../../../../../lib/dev-profiles';
 import { adminDb } from '../../../../../lib/firebase-admin';
 import { requirePlayer } from '../../../../../lib/player-auth';
 import { profileAvatarUrl } from '../../../../../lib/profile-avatars';
+import { hiddenPlayerIds } from '../../../../../lib/player-blocks';
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -15,8 +16,9 @@ const headers = {
 export function OPTIONS() { return new NextResponse(null, { headers }); }
 
 export async function POST(request: Request) {
+  let player;
   try {
-    await requirePlayer(request);
+    player = await requirePlayer(request);
   } catch {
     return NextResponse.json({ error: 'Sign in required.' }, { status: 401, headers });
   }
@@ -27,7 +29,9 @@ export async function POST(request: Request) {
     if (!Array.isArray(ids) || ids.length > 100 || ids.some(id => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id))) {
       return NextResponse.json({ error: 'Invalid player IDs.' }, { status: 400, headers });
     }
-    const unique = [...new Set<string>(ids)];
+    const blocked = [...await hiddenPlayerIds(player.id, ids)];
+    const hidden = new Set(blocked);
+    const unique = [...new Set<string>(ids)].filter(id => !hidden.has(id));
     if (isDevProfileWriter()) {
       const rows = await getExplicitProfiles(unique), names: Record<string, string> = {}, avatars: Record<string, string> = {};
       await Promise.all(rows.map(async row => {
@@ -35,7 +39,7 @@ export async function POST(request: Request) {
         const url = await profileAvatarUrl(row.avatar_key ?? undefined);
         if (url) avatars[row.id] = url;
       }));
-      return NextResponse.json({ names, avatars }, { headers });
+      return NextResponse.json({ names, avatars, blocked }, { headers });
     }
     const refs = unique.map(id => adminDb!.collection('playerProfiles').doc(id));
     const docs = refs.length ? await adminDb!.getAll(...refs) : [];
@@ -48,7 +52,7 @@ export async function POST(request: Request) {
       const avatarUrl = await profileAvatarUrl(typeof doc.data()?.avatarKey === 'string' ? doc.data()!.avatarKey : undefined);
       if (avatarUrl) avatars[id] = avatarUrl;
     }));
-    return NextResponse.json({ names, avatars }, { headers });
+    return NextResponse.json({ names, avatars, blocked }, { headers });
   } catch {
     return NextResponse.json({ error: 'Could not load player names.' }, { status: 500, headers });
   }
