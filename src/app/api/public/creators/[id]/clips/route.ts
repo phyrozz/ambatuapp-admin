@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { isDevVideoWriter } from '../../../../../../lib/dev-content-db';
 import { listCreatorClips } from '../../../../../../lib/dev-videos';
 import { adminDb } from '../../../../../../lib/firebase-admin';
-import { requirePlayer } from '../../../../../../lib/player-auth';
+import { playerFromRequest } from '../../../../../../lib/player-auth';
 import { validFriendId } from '../../../../../../lib/friend-list';
 import { creatorHeaders as headers } from '../../../../../../lib/creator-profile';
 import { signedVideoUrl } from '../../../../../../lib/s3-videos';
@@ -13,18 +13,18 @@ export function OPTIONS() { return new NextResponse(null, { headers }); }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   let player;
-  try { player = await requirePlayer(request); } catch { return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers }); }
+  try { player = await playerFromRequest(request); if(request.headers.has('authorization')&&!player) throw new Error(); } catch { return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401, headers }); }
   const { id } = await params;
   if (!validFriendId(id) || id === 'admin') return NextResponse.json({ error: 'PLAYER_NOT_FOUND' }, { status: 404, headers });
   const db = adminDb;
   if (!db && !(isDevVideoWriter())) return NextResponse.json({ error: 'UNAVAILABLE' }, { status: 503, headers });
-  const own = id === player.id;
+  const own = Boolean(player && id === player.id);
   try {
-    if ((await hiddenPlayerIds(player.id, [id])).has(id)) return NextResponse.json({ error: 'PLAYER_NOT_FOUND' }, { status: 404, headers });
+    if ((await hiddenPlayerIds(player?.id, [id])).has(id)) return NextResponse.json({ error: 'PLAYER_NOT_FOUND' }, { status: 404, headers });
   } catch { return NextResponse.json({ error: 'CLIPS_UNAVAILABLE' }, { status: 503, headers }); }
   const raw = new URL(request.url).searchParams.get('cursor');
   if (isDevVideoWriter()) {
-    try { return NextResponse.json(await listCreatorClips(id, player.id, raw), { headers }); }
+    try { return NextResponse.json(await listCreatorClips(id, player?.id ?? '', raw), { headers }); }
     catch (error) { return NextResponse.json({ error: error instanceof Error && error.message === 'INVALID_CURSOR' ? 'INVALID_CURSOR' : 'CLIPS_UNAVAILABLE' }, { status: error instanceof Error && error.message === 'INVALID_CURSOR' ? 400 : 500, headers }); }
   }
   let cursor: { owner: string; own: boolean; seconds: number; nanoseconds: number; id: string } | null = null;

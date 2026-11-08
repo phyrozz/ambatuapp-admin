@@ -26,7 +26,7 @@ function loadService(withDreamDb) {
     if (modules.has(full)) return modules.get(full).exports;
     const module = { exports: {} }; modules.set(full,module);
     const code = ts.transpileModule(readFileSync(full,'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-    const dependency = name => name === './dev-content-db' ? { withDreamDb } : name === './dream-storage' ? { requireMedia:()=>({namespace:'ambatupost/dev'}),signDreamUpload:async()=>({uploadUrl:'https://fixture.invalid',uploadHeaders:{}}),tryDreamCleanup:async()=>{},tryOwnerDreamCleanup:async()=>{} } : name.endsWith('.mjs') ? require(path.resolve(path.dirname(full),name)) : name.startsWith('.') ? load(`${path.resolve(path.dirname(full),name)}.ts`) : require(name);
+    const dependency = name => name === './dev-content-db' ? { withDreamDb } : name === './profile-avatars' ? { profileAvatarUrl:async()=>null } : name === './dream-storage' ? { requireMedia:()=>({namespace:'ambatupost/dev'}),signDreamUpload:async()=>({uploadUrl:'https://fixture.invalid',uploadHeaders:{}}),tryDreamCleanup:async()=>{},tryOwnerDreamCleanup:async()=>{} } : name.endsWith('.mjs') ? require(path.resolve(path.dirname(full),name)) : name.startsWith('.') ? load(`${path.resolve(path.dirname(full),name)}.ts`) : require(name);
     vm.runInNewContext(`(function(require,module,exports){${code}\n})`, { Buffer, Date, Map, Set, Error,URL,process:{env:{AMBATUPOST_MEDIA_BASE_URL:'https://fixture.invalid'}} })(dependency,module,module.exports);
     return module.exports;
   };
@@ -49,6 +49,8 @@ for (const stage of ['dev','prod']) test(`${stage} Dream migration: private role
     await db.query('ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT EXECUTE ON FUNCTIONS TO anon,authenticated,service_role');
     await db.query(readFileSync(new URL(stage==='dev'?'../migrations/019_dev_dream_media_budget.sql':'../production/011_dream_media_budget.sql',import.meta.url),'utf8'));
     await db.query(readFileSync(new URL(stage==='dev'?'../migrations/020_dev_dream_votes.sql':'../production/012_dream_votes.sql',import.meta.url),'utf8'));
+    await db.query(readFileSync(new URL(stage==='dev'?'../migrations/021_dev_dream_feed.sql':'../production/013_dream_feed.sql',import.meta.url),'utf8'));
+    await db.query(readFileSync(new URL(stage==='dev'?'../migrations/022_dev_dream_avatar.sql':'../production/014_dream_avatar.sql',import.meta.url),'utf8'));
     reader = new pg.Pool({ ...connection,user:login,database,max:6 });
     const withDreamDb = async callback => {
       const client=await reader.connect();

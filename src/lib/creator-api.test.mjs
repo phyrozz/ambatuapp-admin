@@ -21,7 +21,7 @@ class NextResponse extends Response {
 const valueOf = value => value instanceof Timestamp ? value.seconds * 1e9 + value.nanoseconds : value;
 
 function fixture() {
-  const records = new Map(), queries = [], notifications = [];
+  const records = new Map(), queries = [], notifications = [], blocked = new Set();
   const snapshot = ref => ({ id: ref.id, ref, exists: records.has(ref.path), data: () => records.get(ref.path) });
   function doc(documentPath) {
     return { path:documentPath, id:documentPath.split('/').at(-1), get:async function () { return snapshot(this); }, collection:name => collection(`${documentPath}/${name}`) };
@@ -84,16 +84,18 @@ function fixture() {
       if (specifier === 'next/server') return { NextResponse };
       if (specifier === 'firebase-admin/firestore') return { Timestamp, FieldPath:{ documentId:() => '__name__' }, FieldValue:{ serverTimestamp:() => new Timestamp(1700000001) } };
       if (specifier.endsWith('/firebase-admin')) return { adminDb:db };
-      if (specifier.endsWith('/dev-content-db')) return { isDevVideoWriter: () => false, isDevSocialWriter: () => false, isDevProfileWriter: () => false };
+      if (specifier.endsWith('/dev-content-db')) return { isDevVideoWriter: () => false, isDevSocialWriter: () => false, isDevProfileWriter: () => false, isDevLeaderboardWriter: () => false, isDevLoreWriter: () => false };
       if (specifier.endsWith('/dev-videos')) return {};
       if (specifier.endsWith('/dev-social')) return {};
       if (specifier.endsWith('/dev-profiles')) return {};
-      if (specifier.endsWith('/player-auth')) return { requirePlayer:async request => {
+      if (specifier.endsWith('/player-auth')) { const playerFromRequest=async request => {
         const id = request.headers.get('authorization')?.replace('Bearer ', '');
+        if(!id)return null;
         if (!['alice', 'bob', 'carol'].includes(id)) throw new Error('UNAUTHORIZED');
         return { id, email:`${id}@example.test`, emailVerified:true };
-      } };
+      }; return {playerFromRequest,requirePlayer:async request=>{const player=await playerFromRequest(request);if(!player)throw new Error('UNAUTHORIZED');return player;}}; }
       if (specifier.endsWith('/profile-avatars')) return { profileAvatarUrl:async () => 'https://fixture.invalid/avatar' };
+      if (specifier.endsWith('/player-blocks')) return {hiddenPlayerIds:async(viewer,ids)=>new Set(ids.filter(id=>viewer&&blocked.has([viewer,id].sort().join(':'))))};
       if (specifier.endsWith('/s3-videos')) return { signedVideoUrl:async () => 'https://fixture.invalid/thumbnail' };
       if (specifier.endsWith('/player-profiles')) return { playerDisplayProfiles:async ids => new Map(ids.map(id => [id, { username:records.get(`playerProfiles/${id}`).username, avatarUrl:null }])) };
       if (specifier.endsWith('/friend-push')) return { notifyFriendRequest:async (...args) => notifications.push(args) };
@@ -110,8 +112,31 @@ function fixture() {
   const profile = (viewer, id) => load('lib/creator-profile.ts').creatorProfile(db, id, viewer);
   const list = (viewer, id, cursor) => load('app/api/public/creators/[id]/clips/route.ts').GET(request(viewer, `/creators/${id}/clips${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`), { params:Promise.resolve({id}) });
   const search = (viewer, q, cursor) => load('app/api/public/creators/search/route.ts').GET(request(viewer, `/creators/search?q=${encodeURIComponent(q)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`));
-  return { records, notifications, queries, load, request, follow, friendship, profile, list, search };
+  return { records, notifications, queries, blocked, load, request, follow, friendship, profile, list, search };
 }
+
+test('public creator profile, clips, lores and submitted scores support guests while preserving block/privacy boundaries',async()=>{
+  const f=fixture();
+  f.records.set('videos/public-video',{uploaderId:'bob',status:'Published',createdAt:new Timestamp(1700000000),videoKey:'fixture'});
+  f.records.set('videos/draft-video',{uploaderId:'bob',status:'Draft',createdAt:new Timestamp(1700000001),videoKey:'fixture'});
+  f.records.set('lores/lore-public',{uploaderId:'bob',source:'revamp',status:'Published',title:'Public lore',text:'Public text'});
+  f.records.set('lores/lore-private',{uploaderId:'bob',source:'revamp',status:'Draft',title:'Private lore',text:'Secret draft'});
+  f.records.set('leaderboards/ambatutap/entries/bob',{score:123});
+  const context={params:Promise.resolve({id:'bob'})};
+  const guest=suffix=>new Request(`https://fixture.invalid/api/public/creators/bob${suffix}`);
+  const profile=f.load('app/api/public/creators/[id]/route.ts');
+  const clips=f.load('app/api/public/creators/[id]/clips/route.ts');
+  const lores=f.load('app/api/public/creators/[id]/lores/route.ts');
+  const scores=f.load('app/api/public/creators/[id]/scores/route.ts');
+  const guestProfile=await profile.GET(guest(''),context);assert.equal(guestProfile.status,200);
+  const profileBody=await guestProfile.json();assert.equal(profileBody.username,'bob');assert(!('birthDate'in profileBody));assert(!('avatarKey'in profileBody));
+  assert.deepEqual((await (await clips.GET(guest('/clips'),context)).json()).clips.map(item=>item.id),['public-video']);
+  const loreBody=await (await lores.GET(guest('/lores'),context)).json();assert.deepEqual(loreBody.lores.map(item=>item.id),['lore-public']);assert(!JSON.stringify(loreBody).includes('Secret draft'));
+  assert.deepEqual((await (await scores.GET(guest('/scores'),context)).json()).scores,[{gameId:'ambatutap',score:123}]);
+  for(const route of [profile,clips,lores,scores])assert.equal((await route.GET(f.request('invalid','/fixture'),context)).status,401);
+  f.blocked.add('alice:bob');
+  for(const route of [profile,clips,lores,scores])assert.equal((await route.GET(f.request('alice','/fixture'),context)).status,404);
+});
 
 test('following writes reciprocal documents once; declining retains the follower', async () => {
   const f = fixture();

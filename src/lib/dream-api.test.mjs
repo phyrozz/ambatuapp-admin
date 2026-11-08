@@ -18,6 +18,7 @@ function fixture(environment={}) {
     const dependency=name=>{
       if(name.endsWith('/dream-storage'))return {mediaEnabled:()=>false};
       if(name.endsWith('/dream-votes'))return {voteDream:async(...args)=>{calls.push({method:'voteDream',args});return {up:1,down:0,viewerVote:1};}};
+      if(name.endsWith('/dream-feed'))return {listDreamFeed:async(...args)=>{calls.push({method:'listDreamFeed',args});return {dreams:[],nextCursor:null};}};
       if(name==='next/server')return {NextResponse:class extends Response {static json(body,init){return new this(JSON.stringify(body),init);}}};
       if(name.endsWith('/player-auth'))return {playerFromRequest:async request=>{
         const token=request.headers.get('authorization');
@@ -25,10 +26,10 @@ function fixture(environment={}) {
         if(token!=='Bearer alice')throw new Error('INVALID_TOKEN');
         return {id:'alice'};
       }};
-      if(name.endsWith('/dreams'))return Object.fromEntries(['getDream','createDream','editDream','deleteDream','myDreams'].map(method=>[method,async(...args)=>{calls.push({method,args});return method==='deleteDream'?null:method==='myDreams'?{dreams:[],nextCursor:null}:{id,text:'Fixture'};}]));
+      if(name.endsWith('/dreams'))return Object.fromEntries(['getDream','createDream','editDream','deleteDream','myDreams','authorDreams'].map(method=>[method,async(...args)=>{calls.push({method,args});return method==='deleteDream'?null:['myDreams','authorDreams'].includes(method)?{dreams:[],nextCursor:null}:{id,text:'Fixture'};}]));
       return name.startsWith('.')?load(`${path.resolve(path.dirname(full),name)}.ts`):require(name);
     };
-    vm.runInNewContext(`(function(require,module,exports){${code}\n})`,{Request,Response,URL,Buffer,Date,Error,process:{env}})(dependency,module,module.exports);
+    vm.runInNewContext(`(function(require,module,exports){${code}\n})`,{Request,Response,URL,Buffer,Date,Error,performance,process:{env}})(dependency,module,module.exports);
     return module.exports;
   };
   const request=(suffix,{token,method='GET',body,key,contentType='application/json'}={})=>new Request(`https://fixture.invalid/api/public/ambatupost${suffix}`,{method,headers:{...(token!==undefined?{authorization:token}:{}),...(body!==undefined?{'content-type':contentType}:{}),...(key?{'idempotency-key':key}:{})},...(body!==undefined?{body:typeof body==='string'?body:JSON.stringify(body)}:{})});
@@ -85,4 +86,23 @@ test('vote route requires authenticated identity and retry key, and never accept
   const {dreamVoteBody}=f.load('lib/dream-validation.ts');
   for(const value of [{value:'1'},{value:2},{value:null},{value:true},{value:1,voter:'other'},[],null])assert.throws(()=>dreamVoteBody(value),e=>e.status===422);
   for(const value of [-1,0,1])assert.equal(dreamVoteBody({value}),value);
+});
+test('feed guests and members retain verified identity, cursor and private cache headers',async()=>{
+  const f=fixture(),route=f.load('app/api/public/ambatupost/feed/route.ts');
+  const guest=await route.GET(f.request('/feed'));
+  assert.equal(guest.status,200);assert.equal(f.calls.at(-1).args[0],null);
+  assert.match(guest.headers.get('cache-control'),/no-store/);assert.match(guest.headers.get('server-timing'),/dream-feed;dur=/);
+  assert.equal((await route.GET(f.request('/feed?cursor=opaque',{token:'Bearer alice'}))).status,200);
+  assert.deepEqual(Array.from(f.calls.at(-1).args),['alice','opaque']);
+  const before=f.calls.length;
+  assert.equal((await route.GET(f.request('/feed',{token:'Bearer invalid'}))).status,401);
+  assert.equal(f.calls.length,before);
+});
+test('profile Dream lists pass only the verified viewer and preserve guest access',async()=>{
+  const f=fixture(),route=f.load('app/api/public/creators/[id]/dreams/route.ts'),context={params:Promise.resolve({id:'bob'})};
+  const guest=await route.GET(f.request('/creators/bob/dreams'),context);
+  assert.equal(guest.status,200);assert.equal(f.calls.at(-1).args[1],null);assert.match(guest.headers.get('cache-control'),/no-store/);
+  assert.equal((await route.GET(f.request('/creators/bob/dreams?cursor=opaque',{token:'Bearer alice'}),context)).status,200);
+  assert.equal(f.calls.at(-1).args[1],'alice');assert.equal(f.calls.at(-1).args[2],'opaque');
+  assert.equal((await route.GET(f.request('/creators/bob/dreams',{token:'Bearer invalid'}),context)).status,401);
 });

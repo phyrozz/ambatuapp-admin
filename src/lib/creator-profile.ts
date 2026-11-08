@@ -14,7 +14,7 @@ export const creatorHeaders = {
 };
 
 /** Explicit public allowlist: email, birthday, avatar keys and moderation records stay private. */
-export async function creatorProfile(db: Firestore | null, id: string, viewerId: string) {
+export async function creatorProfile(db: Firestore | null, id: string, viewerId: string | null) {
   if ((await hiddenPlayerIds(viewerId, [id])).has(id)) throw new Error('PLAYER_NOT_FOUND');
   if (!db) {
     if (!(isDevProfileWriter() && isDevSocialWriter() && isDevVideoWriter())) throw new Error('PROFILE_UNAVAILABLE');
@@ -38,8 +38,8 @@ export async function creatorProfile(db: Firestore | null, id: string, viewerId:
     useSocial ? null : ref.collection('followers').count().get(),
     useSocial ? null : ref.collection('friends').where('state', '==', 'accepted').count().get(),
     isDevVideoWriter() ? creatorClipCount(id, own) : (own ? clips : clips.where('status', '==', 'Published')).count().get().then(result => result.data().count),
-    own || useSocial ? null : db.collection('playerProfiles').doc(viewerId).collection('friends').doc(id).get(),
-    own || useSocial ? null : db.collection('playerProfiles').doc(viewerId).collection('following').doc(id).get(),
+    own || useSocial || !viewerId ? null : db.collection('playerProfiles').doc(viewerId).collection('friends').doc(id).get(),
+    own || useSocial || !viewerId ? null : db.collection('playerProfiles').doc(viewerId).collection('following').doc(id).get(),
     useProfile ? pgProfile?.avatarUrl ?? null : profileAvatarUrl(typeof data.avatarKey === 'string' ? data.avatarKey : undefined),
     useSocial ? socialCounts(id, viewerId) : null,
   ]);

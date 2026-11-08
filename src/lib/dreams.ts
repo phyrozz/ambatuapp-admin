@@ -13,8 +13,9 @@ import {
   tryDreamCleanup,
   tryOwnerDreamCleanup,
 } from "./dream-storage";
+import { profileAvatarUrl } from "./profile-avatars";
 
-type DreamRow = {
+export type DreamRow = {
   id: string;
   author_id: string;
   body: string;
@@ -25,6 +26,7 @@ type DreamRow = {
   updated_at: Date;
   published_at: Date | null;
   username: string | null;
+  avatar_key: string | null;
   cursor_time?: string;
   attachment_ids: string[];
   buss_up_count: number;
@@ -35,14 +37,15 @@ type DreamRow = {
     attachmentIds: string[];
   } | null;
 };
-const selection = `SELECT d.*,p.username FROM app.dreams d LEFT JOIN app.player_profiles p ON p.id=d.author_id`;
-async function present(
+const selection = `SELECT d.*,p.username,p.avatar_key FROM app.dreams d LEFT JOIN app.player_profiles p ON p.id=d.author_id`;
+export async function presentDreams(
   db: PoolClient,
   rows: DreamRow[],
   viewer: string | null,
+  includePending = true,
 ) {
   const idsFor = (row: DreamRow) =>
-    row.author_id === viewer && row.pending_edit
+    includePending && row.author_id === viewer && row.pending_edit
       ? row.pending_edit.attachmentIds
       : row.attachment_ids;
   const ids = rows.flatMap(idsFor);
@@ -55,12 +58,33 @@ async function present(
       ).rows
     : [];
   const byId = new Map(attachments.map((row) => [row.id, row]));
-  const votes = viewer && rows.length
-    ? (await db.query("SELECT dream_id,value FROM app.dream_votes WHERE voter_id=$1 AND dream_id=ANY($2::uuid[])", [viewer, rows.map((row) => row.id)])).rows
-    : [];
+  const votes =
+    viewer && rows.length
+      ? (
+          await db.query(
+            "SELECT dream_id,value FROM app.dream_votes WHERE voter_id=$1 AND dream_id=ANY($2::uuid[])",
+            [viewer, rows.map((row) => row.id)],
+          )
+        ).rows
+      : [];
   const viewerVotes = new Map(votes.map((vote) => [vote.dream_id, vote.value]));
+  const avatars = new Map(
+    await Promise.all(
+      [
+        ...new Set(
+          rows
+            .map((row) => row.avatar_key)
+            .filter((key): key is string => Boolean(key)),
+        ),
+      ].map(
+        async (key) =>
+          [key, await profileAvatarUrl(key).catch(() => null)] as const,
+      ),
+    ),
+  );
   return rows.map((row) => {
-    const pending = row.author_id === viewer ? row.pending_edit : null;
+    const pending =
+      includePending && row.author_id === viewer ? row.pending_edit : null;
     const media = idsFor(row)
       .map((id) => byId.get(id))
       .filter(Boolean)
@@ -69,6 +93,9 @@ async function present(
       id: row.id,
       authorId: row.author_id,
       authorName: row.username,
+      authorAvatarUrl: row.avatar_key
+        ? (avatars.get(row.avatar_key) ?? null)
+        : null,
       text: pending?.text ?? row.body,
       audience: pending?.audience ?? row.audience,
       publication: pending
@@ -84,7 +111,11 @@ async function present(
       createdAt: row.created_at.toISOString(),
       updatedAt: row.updated_at.toISOString(),
       publishedAt: row.published_at?.toISOString() ?? null,
-      votes: { up: row.buss_up_count, down: row.buss_down_count, viewerVote: viewerVotes.get(row.id) ?? 0 },
+      votes: {
+        up: row.buss_up_count,
+        down: row.buss_down_count,
+        viewerVote: viewerVotes.get(row.id) ?? 0,
+      },
     };
   });
 }
@@ -96,7 +127,7 @@ async function read(db: PoolClient, id: string, viewer: string | null) {
     )
   ).rows[0];
   if (!row) throw new DreamError("DREAM_UNAVAILABLE", 404);
-  return (await present(db, [row], viewer))[0];
+  return (await presentDreams(db, [row], viewer))[0];
 }
 async function lockAuthor(db: PoolClient, author: string) {
   await db.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
@@ -239,7 +270,7 @@ export async function myDreams(author: string, raw: string | null) {
     )
       throw new DreamError("ACCOUNT_UNAVAILABLE", 403);
     const result = await db.query<DreamRow>(
-      `SELECT d.*,p.username,to_char(d.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_time
+      `SELECT d.*,p.username,p.avatar_key,to_char(d.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_time
       FROM app.dreams d LEFT JOIN app.player_profiles p ON p.id=d.author_id WHERE d.author_id=$1
       AND ($2::timestamptz IS NULL OR (d.created_at,d.id)<($2::timestamptz,$3::uuid)) ORDER BY d.created_at DESC,d.id DESC LIMIT 13`,
       [author, cursor?.time ?? null, cursor?.id ?? null],
@@ -247,13 +278,59 @@ export async function myDreams(author: string, raw: string | null) {
     const page = result.rows.slice(0, 12),
       last = page.at(-1);
     return {
-      dreams: await present(db, page, author),
+      dreams: await presentDreams(db, page, author),
       nextCursor:
         result.rows.length > 12 && last
           ? Buffer.from(
               JSON.stringify({
                 v: 1,
                 owner: author,
+                time: last.cursor_time,
+                id: last.id,
+              }),
+            ).toString("base64url")
+          : null,
+    };
+  });
+}
+export async function authorDreams(
+  author: string,
+  viewer: string | null,
+  raw: string | null,
+) {
+  const scope = JSON.stringify(["author", author, viewer]);
+  const cursor = dreamCursor(raw, scope);
+  return withDreamDb(async (db) => {
+    const blocked = await db.query(
+      "SELECT 1 FROM app.player_blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1) LIMIT 1",
+      [author, viewer],
+    );
+    const removed = await db.query(
+      "SELECT 1 FROM app.player_deletions WHERE player_id=$1 OR player_id=$2",
+      [author, viewer],
+    );
+    if (blocked.rowCount || removed.rowCount)
+      throw new DreamError("DREAM_UNAVAILABLE", 404);
+    const rows = (
+      await db.query<DreamRow>(
+        `SELECT d.*,p.username,p.avatar_key,to_char(d.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_time
+       FROM app.dreams d LEFT JOIN app.player_profiles p ON p.id=d.author_id
+       WHERE d.author_id=$1 AND d.publication='published' AND d.moderation='visible' AND ${eligibleDream}
+         AND ($3::timestamptz IS NULL OR (d.created_at,d.id)<($3::timestamptz,$4::uuid))
+       ORDER BY d.created_at DESC,d.id DESC LIMIT 13`,
+        [author, viewer, cursor?.time ?? null, cursor?.id ?? null],
+      )
+    ).rows;
+    const page = rows.slice(0, 12),
+      last = page.at(-1);
+    return {
+      dreams: await presentDreams(db, page, viewer, false),
+      nextCursor:
+        rows.length > 12 && last
+          ? Buffer.from(
+              JSON.stringify({
+                v: 1,
+                owner: scope,
                 time: last.cursor_time,
                 id: last.id,
               }),
@@ -273,10 +350,22 @@ export async function beginPlayerDreamDeletion(author: string) {
       [author],
     );
     // Lock all affected parents in one order before counter triggers/cascades run.
-    await db.query("SELECT id FROM app.dreams WHERE author_id=$1 OR id IN (SELECT dream_id FROM app.dream_votes WHERE voter_id=$1) ORDER BY id FOR UPDATE", [author]);
+    await db.query(
+      "SELECT id FROM app.dreams WHERE author_id=$1 OR id IN (SELECT dream_id FROM app.dream_votes WHERE voter_id=$1) ORDER BY id FOR UPDATE",
+      [author],
+    );
     await db.query("DELETE FROM app.dream_votes WHERE voter_id=$1", [author]);
-    await db.query("DELETE FROM app.dream_vote_requests WHERE voter_id=$1", [author]);
-    await db.query("DELETE FROM app.dream_vote_budgets WHERE voter_id=$1", [author]);
+    await db.query("DELETE FROM app.dream_vote_requests WHERE voter_id=$1", [
+      author,
+    ]);
+    await db.query("DELETE FROM app.dream_vote_budgets WHERE voter_id=$1", [
+      author,
+    ]);
+    await db.query("DELETE FROM app.dream_feed_windows WHERE viewer_key=$1", [
+      createHash("sha256")
+        .update(JSON.stringify(["dream-feed-v1", author]))
+        .digest("hex"),
+    ]);
     const attachments = (
       await db.query(
         "SELECT * FROM app.dream_attachments WHERE owner_id=$1 FOR UPDATE",

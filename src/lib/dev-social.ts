@@ -67,7 +67,7 @@ export async function friendRelationships(playerId: string, ids: string[]) {
     return new Map(rows.map(row => [row.other_player_id, { state: row.state, pinned: row.pinned }]));
   });
 }
-export async function socialCounts(id: string, viewerId: string) {
+export async function socialCounts(id: string, viewerId: string | null) {
   return withDevSocialDb(async db => {
     const result = await db.query(`SELECT
       (SELECT count(*)::int FROM app.follows WHERE followed_id=$1) AS followers,
