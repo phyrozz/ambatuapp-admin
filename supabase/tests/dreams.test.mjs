@@ -30,7 +30,7 @@ function loadService(withDreamDb) {
     vm.runInNewContext(`(function(require,module,exports){${code}\n})`, { Buffer, Date, Map, Set, Error,URL,process:{env:{AMBATUPOST_MEDIA_BASE_URL:'https://fixture.invalid'}} })(dependency,module,module.exports);
     return module.exports;
   };
-  return {...load('dreams.ts'),...load('dream-uploads.ts')};
+  return {...load('dreams.ts'),...load('dream-uploads.ts'),...load('dream-votes.ts')};
 }
 for (const stage of ['dev','prod']) test(`${stage} Dream migration: private roles, audience checks, idempotency, edits, cursors and deletion races`, { skip: !port }, async () => {
   const connection = { host:'127.0.0.1', port:Number(port), user:'postgres', database:'postgres' };
@@ -48,6 +48,7 @@ for (const stage of ['dev','prod']) test(`${stage} Dream migration: private role
     await db.query(readFileSync(new URL(stage==='dev'?'../migrations/018_dev_dream_media.sql':'../production/010_dream_media.sql',import.meta.url),'utf8'));
     await db.query('ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT EXECUTE ON FUNCTIONS TO anon,authenticated,service_role');
     await db.query(readFileSync(new URL(stage==='dev'?'../migrations/019_dev_dream_media_budget.sql':'../production/011_dream_media_budget.sql',import.meta.url),'utf8'));
+    await db.query(readFileSync(new URL(stage==='dev'?'../migrations/020_dev_dream_votes.sql':'../production/012_dream_votes.sql',import.meta.url),'utf8'));
     reader = new pg.Pool({ ...connection,user:login,database,max:6 });
     const withDreamDb = async callback => {
       const client=await reader.connect();
@@ -68,6 +69,50 @@ for (const stage of ['dev','prod']) test(`${stage} Dream migration: private role
       assert.equal(dream.authorName,'Author'); assert(!('birthDate' in dream));
     }
     const draft=await service.createDream(author,{text:'Private draft',publish:false},'draft-request');
+    await assert.rejects(service.voteDream(draft.id,author,{value:1},'draft-vote'),e=>e.status===404);
+    const voted=await service.createDream(author,{text:'Vote fixture'},'votes-create');
+    const firstVote=await service.voteDream(voted.id,author,{value:1},'self-vote');
+    assert.equal(firstVote.up,1);assert.equal(firstVote.viewerVote,1);
+    await Promise.all(Array.from({length:20},(_,i)=>service.voteDream(voted.id,`voter-${i}`,{value:i%2?-1:1},`parallel-vote-${i}`)));
+    assert.equal((await service.getDream(voted.id,null)).votes.up,11);
+    assert.equal((await service.getDream(voted.id,null)).votes.down,10);
+    assert.equal((await service.getDream(voted.id,null)).votes.viewerVote,0);
+    await Promise.all(Array.from({length:6},()=>service.voteDream(voted.id,author,{value:-1},'switch-once')));
+    assert.equal((await service.getDream(voted.id,author)).votes.down,11);
+    const delayed=await service.voteDream(voted.id,author,{value:1},'self-vote');
+    assert.equal(delayed.viewerVote,-1,'a delayed old receipt cannot undo a newer vote');
+    await assert.rejects(service.voteDream(voted.id,author,{value:0},'self-vote'),e=>e.status===409);
+    await service.voteDream(voted.id,author,{value:0},'remove-vote');
+    assert.equal((await service.getDream(voted.id,author)).votes.viewerVote,0);
+    await Promise.all(Array.from({length:12},(_,i)=>service.voteDream(voted.id,author,{value:i%2?1:-1},`competing-switch-${i}`)));
+    const actual=(await db.query('SELECT count(*) FILTER(WHERE value=1)::integer AS up,count(*) FILTER(WHERE value=-1)::integer AS down FROM app.dream_votes WHERE dream_id=$1',[voted.id])).rows[0];
+    const totals=(await service.getDream(voted.id,author)).votes;
+    assert.equal(totals.up,actual.up);assert.equal(totals.down,actual.down);
+    await service.voteDream(voted.id,author,{value:0},'clear-competing-switch');
+    await assert.rejects(service.voteDream(voted.id,blocked,{value:1},'blocked-vote'),e=>e.status===404);
+    await service.editDream(voted.id,author,{revision:1,audience:'friends'});
+    await assert.rejects(service.voteDream(voted.id,'voter-0',{value:1},'parallel-vote-0'),e=>e.status===404,'retries must recheck current audience');
+    await service.voteDream(voted.id,friend,{value:1},'friend-vote');
+    await db.query("UPDATE app.friendships SET state='incoming' WHERE player_id=$1 AND other_player_id=$2",[friend,author]);
+    await assert.rejects(service.voteDream(voted.id,friend,{value:0},'unfriend-vote'),e=>e.status===404);
+    await db.query("UPDATE app.friendships SET state='accepted' WHERE player_id=$1 AND other_player_id=$2",[friend,author]);
+    await service.beginPlayerDreamDeletion('voter-0');
+    assert.equal((await service.getDream(voted.id,author)).votes.up,10,'account vote cleanup adjusts surviving counts');
+    await assert.rejects(service.voteDream(voted.id,'voter-0',{value:1},'deleted-voter'),e=>e.status===404);
+    await service.editDream(voted.id,author,{revision:2,audience:'public'});
+    await db.query("INSERT INTO app.dream_vote_budgets(voter_id,minute_requests) VALUES('limited-voter',60)");
+    await assert.rejects(service.voteDream(voted.id,'limited-voter',{value:1},'limited-vote'),e=>e.status===429);
+    await db.query("INSERT INTO app.dream_vote_budgets(voter_id,day_requests) VALUES('day-limited-voter',1000)");
+    await assert.rejects(service.voteDream(voted.id,'day-limited-voter',{value:1},'daily-limited'),e=>e.status===429);
+    await db.query("UPDATE app.dreams SET moderation='removed' WHERE id=$1",[voted.id]);
+    await assert.rejects(service.voteDream(voted.id,author,{value:1},'removed-vote'),e=>e.status===404);
+    for(const table of ['dream_votes','dream_vote_requests','dream_vote_budgets']) {
+      const exposed=await db.query("SELECT has_table_privilege('anon',$1,'SELECT') OR has_table_privilege('authenticated',$1,'INSERT') AS exposed",[`app.${table}`]);
+      assert.equal(exposed.rows[0].exposed,false);
+    }
+    await service.deleteDream(voted.id,author);
+    assert.equal((await db.query('SELECT 1 FROM app.dream_votes WHERE dream_id=$1',[voted.id])).rowCount,0);
+    assert.equal((await db.query('SELECT 1 FROM app.dream_vote_requests WHERE dream_id=$1',[voted.id])).rowCount,0);
     await assert.rejects(service.getDream(draft.id,null),error=>error.status===404);
     assert.equal((await service.getDream(draft.id,author)).publication,'draft');
     const published=await service.editDream(draft.id,author,{revision:1,publish:true});

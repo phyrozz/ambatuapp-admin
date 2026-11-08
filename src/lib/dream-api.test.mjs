@@ -17,6 +17,7 @@ function fixture(environment={}) {
     const code=ts.transpileModule(readFileSync(full,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
     const dependency=name=>{
       if(name.endsWith('/dream-storage'))return {mediaEnabled:()=>false};
+      if(name.endsWith('/dream-votes'))return {voteDream:async(...args)=>{calls.push({method:'voteDream',args});return {up:1,down:0,viewerVote:1};}};
       if(name==='next/server')return {NextResponse:class extends Response {static json(body,init){return new this(JSON.stringify(body),init);}}};
       if(name.endsWith('/player-auth'))return {playerFromRequest:async request=>{
         const token=request.headers.get('authorization');
@@ -74,4 +75,14 @@ test('text validation counts Unicode points and rejects forged fields, attachmen
   assert.throws(()=>dreamBody({text:'Edited',revision:0},true),error=>error.status===422);
   const cursor=Buffer.from(JSON.stringify({v:1,owner:'alice',time:'2026-02-31T00:00:00.000000Z',id})).toString('base64url');
   assert.throws(()=>dreamCursor(cursor,'alice'),error=>error.status===400);
+});
+test('vote route requires authenticated identity and retry key, and never accepts a forged voter',async()=>{
+  const f=fixture(),route=f.load('app/api/public/ambatupost/[id]/vote/route.ts'),context={params:Promise.resolve({id})};
+  assert.equal((await route.POST(f.request(`/${id}/vote`,{method:'POST',body:{value:1},key:'vote-key-1'}),context)).status,401);
+  assert.equal((await route.POST(f.request(`/${id}/vote`,{method:'POST',token:'Bearer alice',body:{value:1}}),context)).status,422);
+  const response=await route.POST(f.request(`/${id}/vote`,{method:'POST',token:'Bearer alice',body:{value:1},key:'vote-key-1'}),context);
+  assert.equal(response.status,200);assert.equal(f.calls.at(-1).args[1],'alice');assert.match(response.headers.get('cache-control'),/no-store/);
+  const {dreamVoteBody}=f.load('lib/dream-validation.ts');
+  for(const value of [{value:'1'},{value:2},{value:null},{value:true},{value:1,voter:'other'},[],null])assert.throws(()=>dreamVoteBody(value),e=>e.status===422);
+  for(const value of [-1,0,1])assert.equal(dreamVoteBody({value}),value);
 });

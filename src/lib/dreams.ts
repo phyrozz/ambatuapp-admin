@@ -27,6 +27,8 @@ type DreamRow = {
   username: string | null;
   cursor_time?: string;
   attachment_ids: string[];
+  buss_up_count: number;
+  buss_down_count: number;
   pending_edit: {
     text: string;
     audience: string;
@@ -53,6 +55,10 @@ async function present(
       ).rows
     : [];
   const byId = new Map(attachments.map((row) => [row.id, row]));
+  const votes = viewer && rows.length
+    ? (await db.query("SELECT dream_id,value FROM app.dream_votes WHERE voter_id=$1 AND dream_id=ANY($2::uuid[])", [viewer, rows.map((row) => row.id)])).rows
+    : [];
+  const viewerVotes = new Map(votes.map((vote) => [vote.dream_id, vote.value]));
   return rows.map((row) => {
     const pending = row.author_id === viewer ? row.pending_edit : null;
     const media = idsFor(row)
@@ -78,6 +84,7 @@ async function present(
       createdAt: row.created_at.toISOString(),
       updatedAt: row.updated_at.toISOString(),
       publishedAt: row.published_at?.toISOString() ?? null,
+      votes: { up: row.buss_up_count, down: row.buss_down_count, viewerVote: viewerVotes.get(row.id) ?? 0 },
     };
   });
 }
@@ -265,6 +272,11 @@ export async function beginPlayerDreamDeletion(author: string) {
       "INSERT INTO app.player_deletions (player_id,state) VALUES ($1,'pending') ON CONFLICT (player_id) DO NOTHING",
       [author],
     );
+    // Lock all affected parents in one order before counter triggers/cascades run.
+    await db.query("SELECT id FROM app.dreams WHERE author_id=$1 OR id IN (SELECT dream_id FROM app.dream_votes WHERE voter_id=$1) ORDER BY id FOR UPDATE", [author]);
+    await db.query("DELETE FROM app.dream_votes WHERE voter_id=$1", [author]);
+    await db.query("DELETE FROM app.dream_vote_requests WHERE voter_id=$1", [author]);
+    await db.query("DELETE FROM app.dream_vote_budgets WHERE voter_id=$1", [author]);
     const attachments = (
       await db.query(
         "SELECT * FROM app.dream_attachments WHERE owner_id=$1 FOR UPDATE",

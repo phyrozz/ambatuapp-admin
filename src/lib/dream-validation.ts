@@ -7,6 +7,14 @@ export class DreamError extends Error {
   }
 }
 export const DREAM_TEXT_LIMIT = 2000;
+export function dreamVoteBody(value: unknown): -1 | 0 | 1 {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new DreamError("INVALID_VOTE", 422);
+  const body = value as Record<string, unknown>;
+  if (Object.keys(body).length !== 1 || ![-1, 0, 1].includes(body.value as number))
+    throw new DreamError("INVALID_VOTE", 422);
+  return body.value as -1 | 0 | 1;
+}
 export const validDreamId = (value: unknown): value is string =>
   typeof value === "string" &&
   /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
