@@ -1,0 +1,436 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Budgeted Ambatupost media. Lambda streaming plus finite on-demand Fargate tasks; no ECS service, ALB, NAT or new bucket.
+Parameters:
+  Stage: { Type: String, AllowedValues: [dev, prod] }
+  MediaBucket:
+    {
+      Type: String,
+      Description: "Existing private bucket NAME, without arn or s3 prefix.",
+    }
+  ImageUri: { Type: String, Description: Immutable ECR worker image URI. }
+  CodeArtifactKey:
+    {
+      Type: String,
+      Description: "Private Lambda zip key in MediaBucket, produced by package-lambda.mjs.",
+    }
+  VpcId: { Type: "AWS::EC2::VPC::Id" }
+  Subnets:
+    {
+      Type: "List<AWS::EC2::Subnet::Id>",
+      Description: Existing public subnet(s) with internet routing. Worker has no inbound ports.,
+    }
+  WorkerDatabaseParameterArn:
+    {
+      Type: String,
+      Description: SecureString SSM ARN holding worker DATABASE_CONFIG JSON.,
+    }
+  GatewayDatabaseParameterArn:
+    {
+      Type: String,
+      Description: Separate SecureString SSM ARN holding gateway DATABASE_CONFIG JSON.,
+    }
+  DatabaseKmsKeyArn: { Type: String, Default: "" }
+  GatewayEnabled:
+    { Type: String, Default: "false", AllowedValues: ["false", "true"] }
+Conditions:
+  CustomKms: !Not [!Equals [!Ref DatabaseKmsKeyArn, ""]]
+  EnableGateway: !Equals [!Ref GatewayEnabled, "true"]
+Resources:
+  InputDeadLetters:
+    Type: AWS::SQS::Queue
+    Properties: { MessageRetentionPeriod: 1209600, SqsManagedSseEnabled: true }
+  InputQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 180
+      MessageRetentionPeriod: 345600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        {
+          deadLetterTargetArn: !GetAtt InputDeadLetters.Arn,
+          maxReceiveCount: 5,
+        }
+  InputQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref InputQueue]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: s3.amazonaws.com }
+            Action: sqs:SendMessage
+            Resource: !GetAtt InputQueue.Arn
+            Condition:
+              ArnEquals:
+                {
+                  "aws:SourceArn": !Sub "arn:${AWS::Partition}:s3:::${MediaBucket}",
+                }
+              StringEquals: { "aws:SourceAccount": !Ref "AWS::AccountId" }
+          - Effect: Deny
+            Principal: "*"
+            Action: "sqs:*"
+            Resource: !GetAtt InputQueue.Arn
+            Condition: { Bool: { "aws:SecureTransport": "false" } }
+  WorkerLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { RetentionInDays: 7 }
+  GatewayLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { RetentionInDays: 7 }
+  DispatcherLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { RetentionInDays: 7 }
+  Cluster:
+    Type: AWS::ECS::Cluster
+  WorkerSecurity:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      { GroupDescription: No inbound media worker traffic, VpcId: !Ref VpcId }
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          [
+            {
+              Effect: Allow,
+              Principal: { Service: ecs-tasks.amazonaws.com },
+              Action: sts:AssumeRole,
+            },
+          ]
+      ManagedPolicyArns:
+        [
+          !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+        ]
+      Policies:
+        - PolicyName: WorkerDatabase
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - {
+                  Effect: Allow,
+                  Action: ssm:GetParameters,
+                  Resource: !Ref WorkerDatabaseParameterArn,
+                }
+              - !If
+                - CustomKms
+                - {
+                    Effect: Allow,
+                    Action: kms:Decrypt,
+                    Resource: !Ref DatabaseKmsKeyArn,
+                  }
+                - !Ref AWS::NoValue
+  WorkerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          [
+            {
+              Effect: Allow,
+              Principal: { Service: ecs-tasks.amazonaws.com },
+              Action: sts:AssumeRole,
+            },
+          ]
+      Policies:
+        - PolicyName: StageMedia
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject, s3:DeleteObject]
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${MediaBucket}/ambatupost/${Stage}/input/*"
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${MediaBucket}/ambatupost/${Stage}/media/*"
+  WorkerTask:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: "2048"
+      Memory: "4096"
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt WorkerRole.Arn
+      ContainerDefinitions:
+        - Name: worker
+          Image: !Ref ImageUri
+          Essential: true
+          Command: [node, worker.mjs]
+          StopTimeout: 30
+          Environment:
+            - { Name: STAGE, Value: !Ref Stage }
+            - { Name: AWS_REGION, Value: !Ref "AWS::Region" }
+            - { Name: MEDIA_BUCKET, Value: !Ref MediaBucket }
+          Secrets:
+            [
+              {
+                Name: DATABASE_CONFIG,
+                ValueFrom: !Ref WorkerDatabaseParameterArn,
+              },
+            ]
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              {
+                awslogs-group: !Ref WorkerLogs,
+                awslogs-region: !Ref "AWS::Region",
+                awslogs-stream-prefix: worker,
+              }
+  GatewayRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          [
+            {
+              Effect: Allow,
+              Principal: { Service: lambda.amazonaws.com },
+              Action: sts:AssumeRole,
+            },
+          ]
+      Policies:
+        - PolicyName: VerifiedMedia
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - {
+                  Effect: Allow,
+                  Action: [logs:CreateLogStream, logs:PutLogEvents],
+                  Resource: !GetAtt GatewayLogs.Arn,
+                }
+              - {
+                  Effect: Allow,
+                  Action: ssm:GetParameter,
+                  Resource: !Ref GatewayDatabaseParameterArn,
+                }
+              - !If
+                - CustomKms
+                - {
+                    Effect: Allow,
+                    Action: kms:Decrypt,
+                    Resource: !Ref DatabaseKmsKeyArn,
+                  }
+                - !Ref AWS::NoValue
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${MediaBucket}/ambatupost/${Stage}/media/*"
+  Gateway:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: nodejs22.x
+      Handler: lambda-gateway.handler
+      Role: !GetAtt GatewayRole.Arn
+      Code: { S3Bucket: !Ref MediaBucket, S3Key: !Ref CodeArtifactKey }
+      MemorySize: 256
+      Timeout: 180
+      # Enabled functions share the existing account pool. Zero only disables
+      # serving; it reserves no capacity and works on low-quota accounts.
+      ReservedConcurrentExecutions: !If [EnableGateway, !Ref "AWS::NoValue", 0]
+      LoggingConfig:
+        {
+          LogGroup: !Ref GatewayLogs,
+          LogFormat: JSON,
+          SystemLogLevel: WARN,
+          ApplicationLogLevel: WARN,
+        }
+      Environment:
+        Variables:
+          STAGE: !Ref Stage
+          MEDIA_BUCKET: !Ref MediaBucket
+          DATABASE_PARAMETER: !Ref GatewayDatabaseParameterArn
+          AMBATUPOST_ENABLED: !Ref GatewayEnabled
+  GatewayUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      {
+        TargetFunctionArn: !GetAtt Gateway.Arn,
+        AuthType: NONE,
+        InvokeMode: RESPONSE_STREAM,
+      }
+  GatewayUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      {
+        FunctionName: !Ref Gateway,
+        Action: "lambda:InvokeFunctionUrl",
+        Principal: "*",
+        FunctionUrlAuthType: NONE,
+      }
+  GatewayInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      {
+        FunctionName: !Ref Gateway,
+        Action: "lambda:InvokeFunction",
+        Principal: "*",
+        InvokedViaFunctionUrl: true,
+      }
+  DispatcherRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          [
+            {
+              Effect: Allow,
+              Principal: { Service: lambda.amazonaws.com },
+              Action: sts:AssumeRole,
+            },
+          ]
+      Policies:
+        - PolicyName: BoundedDispatch
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - {
+                  Effect: Allow,
+                  Action: [logs:CreateLogStream, logs:PutLogEvents],
+                  Resource: !GetAtt DispatcherLogs.Arn,
+                }
+              - {
+                  Effect: Allow,
+                  Action: ssm:GetParameter,
+                  Resource: !Ref WorkerDatabaseParameterArn,
+                }
+              - !If
+                - CustomKms
+                - {
+                    Effect: Allow,
+                    Action: kms:Decrypt,
+                    Resource: !Ref DatabaseKmsKeyArn,
+                  }
+                - !Ref AWS::NoValue
+              - {
+                  Effect: Allow,
+                  Action:
+                    [
+                      sqs:ReceiveMessage,
+                      sqs:DeleteMessage,
+                      sqs:GetQueueAttributes,
+                    ],
+                  Resource: !GetAtt InputQueue.Arn,
+                }
+              - Effect: Allow
+                Action: [s3:GetObject, s3:DeleteObject]
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:s3:::${MediaBucket}/ambatupost/${Stage}/input/*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${MediaBucket}/ambatupost/${Stage}/media/*"
+              - Effect: Allow
+                Action: ecs:RunTask
+                Resource: !Ref WorkerTask
+                Condition: { ArnEquals: { "ecs:cluster": !GetAtt Cluster.Arn } }
+              - Effect: Allow
+                Action: [ecs:DescribeTasks, ecs:StopTask]
+                Resource: !Sub "arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task/${Cluster}/*"
+              - {
+                  Effect: Allow,
+                  Action: ecs:ListTasks,
+                  Resource: "*",
+                  Condition:
+                    { ArnEquals: { "ecs:cluster": !GetAtt Cluster.Arn } },
+                }
+              - {
+                  Effect: Allow,
+                  Action: iam:PassRole,
+                  Resource: [!GetAtt WorkerRole.Arn, !GetAtt ExecutionRole.Arn],
+                  Condition:
+                    {
+                      StringEquals:
+                        { "iam:PassedToService": ecs-tasks.amazonaws.com },
+                    },
+                }
+              - {
+                  Effect: Allow,
+                  Action:
+                    [
+                      lambda:PutFunctionConcurrency,
+                      lambda:DeleteFunctionConcurrency,
+                    ],
+                  Resource: !GetAtt Gateway.Arn,
+                }
+  Dispatcher:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: nodejs22.x
+      Handler: lambda-dispatcher.handler
+      Role: !GetAtt DispatcherRole.Arn
+      Code: { S3Bucket: !Ref MediaBucket, S3Key: !Ref CodeArtifactKey }
+      MemorySize: 128
+      Timeout: 25
+      LoggingConfig:
+        {
+          LogGroup: !Ref DispatcherLogs,
+          LogFormat: JSON,
+          SystemLogLevel: WARN,
+          ApplicationLogLevel: WARN,
+        }
+      Environment:
+        Variables:
+          STAGE: !Ref Stage
+          MEDIA_BUCKET: !Ref MediaBucket
+          DATABASE_PARAMETER: !Ref WorkerDatabaseParameterArn
+          GATEWAY_FUNCTION: !Ref Gateway
+          GATEWAY_ENABLED: !Ref GatewayEnabled
+          WORKER_CLUSTER: !Ref Cluster
+          WORKER_TASK_DEFINITION: !Ref WorkerTask
+          WORKER_SUBNETS: !Join [",", !Ref Subnets]
+          WORKER_SECURITY_GROUP: !Ref WorkerSecurity
+  InputMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      FunctionName: !Ref Dispatcher
+      EventSourceArn: !GetAtt InputQueue.Arn
+      BatchSize: 5
+      MaximumBatchingWindowInSeconds: 1
+      FunctionResponseTypes: [ReportBatchItemFailures]
+      ScalingConfig: { MaximumConcurrency: 2 }
+  Maintenance:
+    Type: AWS::Events::Rule
+    Properties:
+      ScheduleExpression: rate(1 minute)
+      State: ENABLED
+      Targets:
+        [
+          {
+            Arn: !GetAtt Dispatcher.Arn,
+            Id: maintenance,
+            RetryPolicy:
+              { MaximumRetryAttempts: 0, MaximumEventAgeInSeconds: 60 },
+          },
+        ]
+  MaintenancePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      {
+        FunctionName: !Ref Dispatcher,
+        Action: "lambda:InvokeFunction",
+        Principal: events.amazonaws.com,
+        SourceArn: !GetAtt Maintenance.Arn,
+      }
+  AppMediaPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Attach to this stage's API runtime principal; does not grant bucket listing or public access.
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: s3:PutObject
+            Resource: !Sub "arn:${AWS::Partition}:s3:::${MediaBucket}/ambatupost/${Stage}/input/*"
+          - Effect: Allow
+            Action: s3:DeleteObject
+            Resource:
+              - !Sub "arn:${AWS::Partition}:s3:::${MediaBucket}/ambatupost/${Stage}/input/*"
+              - !Sub "arn:${AWS::Partition}:s3:::${MediaBucket}/ambatupost/${Stage}/media/*"
+Outputs:
+  InputQueueArn: { Value: !GetAtt InputQueue.Arn }
+  GatewayBaseUrl: { Value: !GetAtt GatewayUrl.FunctionUrl }
+  GatewayFunctionName: { Value: !Ref Gateway }
+  AppMediaPolicyArn: { Value: !Ref AppMediaPolicy }
+  Cluster: { Value: !Ref Cluster }

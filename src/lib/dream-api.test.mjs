@@ -16,6 +16,7 @@ function fixture(environment={}) {
     const module={exports:{}};cache.set(full,module);
     const code=ts.transpileModule(readFileSync(full,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
     const dependency=name=>{
+      if(name.endsWith('/dream-storage'))return {mediaEnabled:()=>false};
       if(name==='next/server')return {NextResponse:class extends Response {static json(body,init){return new this(JSON.stringify(body),init);}}};
       if(name.endsWith('/player-auth'))return {playerFromRequest:async request=>{
         const token=request.headers.get('authorization');
@@ -23,7 +24,7 @@ function fixture(environment={}) {
         if(token!=='Bearer alice')throw new Error('INVALID_TOKEN');
         return {id:'alice'};
       }};
-      if(name.endsWith('/dreams'))return Object.fromEntries(['getDream','createDream','editDream','deleteDream','myDreams'].map(method=>[method,async(...args)=>{calls.push({method,args});return method==='myDreams'?{dreams:[],nextCursor:null}:{id,text:'Fixture'};}]));
+      if(name.endsWith('/dreams'))return Object.fromEntries(['getDream','createDream','editDream','deleteDream','myDreams'].map(method=>[method,async(...args)=>{calls.push({method,args});return method==='deleteDream'?null:method==='myDreams'?{dreams:[],nextCursor:null}:{id,text:'Fixture'};}]));
       return name.startsWith('.')?load(`${path.resolve(path.dirname(full),name)}.ts`):require(name);
     };
     vm.runInNewContext(`(function(require,module,exports){${code}\n})`,{Request,Response,URL,Buffer,Date,Error,process:{env}})(dependency,module,module.exports);

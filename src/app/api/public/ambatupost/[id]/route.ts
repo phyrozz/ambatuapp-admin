@@ -18,6 +18,6 @@ export async function PATCH(request: Request, context: Context) {
   catch (error) { return dreamFailure(error); }
 }
 export async function DELETE(request: Request, context: Context) {
-  try { const author = (await dreamViewer(request, true))!; await deleteDream(await idFrom(context), author); return new NextResponse(null, { status: 204, headers: dreamHeaders }); }
+  try { const author = (await dreamViewer(request, true))!; const operation = await deleteDream(await idFrom(context), author); return operation ? dreamResponse(operation,202) : new NextResponse(null, { status: 204, headers: dreamHeaders }); }
   catch (error) { return dreamFailure(error); }
 }
