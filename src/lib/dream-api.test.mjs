@@ -17,6 +17,7 @@ function fixture(environment={}) {
     const code=ts.transpileModule(readFileSync(full,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
     const dependency=name=>{
       if(name.endsWith('/dream-storage'))return {mediaEnabled:()=>false};
+      if(name.endsWith('/dream-comments'))return Object.fromEntries(['listDreamComments','createDreamComment','editDreamComment','deleteDreamComment','voteDreamComment'].map(method=>[method,async(...args)=>{calls.push({method,args});return method==='listDreamComments'?{comments:[],nextCursor:null}:{id,text:'Comment fixture'};}]));
       if(name.endsWith('/dream-votes'))return {voteDream:async(...args)=>{calls.push({method:'voteDream',args});return {up:1,down:0,viewerVote:1};}};
       if(name.endsWith('/dream-feed'))return {listDreamFeed:async(...args)=>{calls.push({method:'listDreamFeed',args});return {dreams:[],nextCursor:null};}};
       if(name==='next/server')return {NextResponse:class extends Response {static json(body,init){return new this(JSON.stringify(body),init);}}};
@@ -97,6 +98,27 @@ test('feed guests and members retain verified identity, cursor and private cache
   const before=f.calls.length;
   assert.equal((await route.GET(f.request('/feed',{token:'Bearer invalid'}))).status,401);
   assert.equal(f.calls.length,before);
+});
+
+test('comment endpoints allow guest reads and require verified membership for every mutation',async()=>{
+  const f=fixture(),commentId='2bb3f411-1e88-44aa-88aa-18a609d93333';
+  const context={params:Promise.resolve({id,commentId})};
+  const list=f.load('app/api/public/ambatupost/[id]/comments/route.ts');
+  const guest=await list.GET(f.request(`/${id}/comments?parent=${commentId}&cursor=opaque`),context);
+  assert.equal(guest.status,200);assert.deepEqual(Array.from(f.calls.at(-1).args),[id,null,'opaque',commentId]);
+  assert.match(guest.headers.get('cache-control'),/no-store/);
+  assert.equal((await list.GET(f.request(`/${id}/comments`,{token:'Bearer invalid'}),context)).status,401);
+  const mutations=[['app/api/public/ambatupost/[id]/comments/route.ts','POST',{text:'Comment'}],['app/api/public/ambatupost/[id]/comments/[commentId]/route.ts','PATCH',{text:'Edit',revision:1}],['app/api/public/ambatupost/[id]/comments/[commentId]/route.ts','DELETE',undefined],['app/api/public/ambatupost/[id]/comments/[commentId]/vote/route.ts','POST',{value:1}]];
+  for(const [file,method,body] of mutations){
+    const route=f.load(file);
+    assert.equal((await route[method](f.request(`/${id}/comments`,{method,body,key:'comment-intent-1'}),context)).status,401);
+    const result=await route[method](f.request(`/${id}/comments`,{method,body,key:'comment-intent-1',token:'Bearer alice'}),context);
+    assert([200,201].includes(result.status));assert(f.calls.at(-1).args.includes('alice'));
+    const preflight=route.OPTIONS();assert.equal(preflight.status,204);assert.match(preflight.headers.get('access-control-allow-methods'),new RegExp(method));
+  }
+  assert.equal((await list.POST(f.request(`/${id}/comments`,{method:'POST',token:'Bearer alice',body:{text:'No key'}}),context)).status,422);
+  const invalid={params:Promise.resolve({id,commentId:'invalid'})};
+  assert.equal((await f.load(mutations[1][0]).PATCH(f.request(`/${id}/comments/invalid`,{method:'PATCH',token:'Bearer alice',body:{text:'Bad',revision:1}}),invalid)).status,404);
 });
 test('profile Dream lists pass only the verified viewer and preserve guest access',async()=>{
   const f=fixture(),route=f.load('app/api/public/creators/[id]/dreams/route.ts'),context={params:Promise.resolve({id:'bob'})};

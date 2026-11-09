@@ -14,6 +14,7 @@ import {
   tryOwnerDreamCleanup,
 } from "./dream-storage";
 import { profileAvatarUrl } from "./profile-avatars";
+import { cleanupPlayerDreamComments } from "./dream-comments";
 
 export type DreamRow = {
   id: string;
@@ -351,9 +352,13 @@ export async function beginPlayerDreamDeletion(author: string) {
     );
     // Lock all affected parents in one order before counter triggers/cascades run.
     await db.query(
-      "SELECT id FROM app.dreams WHERE author_id=$1 OR id IN (SELECT dream_id FROM app.dream_votes WHERE voter_id=$1) ORDER BY id FOR UPDATE",
+      `SELECT id FROM app.dreams WHERE author_id=$1 OR id IN (SELECT dream_id FROM app.dream_votes WHERE voter_id=$1)
+       OR id IN (SELECT dream_id FROM app.dream_comments WHERE author_id=$1)
+       OR id IN (SELECT c.dream_id FROM app.dream_comment_votes v JOIN app.dream_comments c ON c.id=v.comment_id WHERE v.voter_id=$1)
+       ORDER BY id FOR UPDATE`,
       [author],
     );
+    await cleanupPlayerDreamComments(db, author);
     await db.query("DELETE FROM app.dream_votes WHERE voter_id=$1", [author]);
     await db.query("DELETE FROM app.dream_vote_requests WHERE voter_id=$1", [
       author,

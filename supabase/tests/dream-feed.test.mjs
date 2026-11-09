@@ -33,7 +33,7 @@ for(const stage of ['dev','prod'])test(`${stage} Dream feed: bounded private win
     for(const name of ['anon','authenticated','service_role',login])if(!(await db.query('SELECT 1 FROM pg_roles WHERE rolname=$1',[name])).rowCount)await db.query(`CREATE ROLE ${name} LOGIN NOINHERIT`);
     await db.query(readFileSync(new URL('../migrations/001_app_schema.sql',import.meta.url),'utf8'));
     await db.query('CREATE TABLE app.player_blocks(blocker_id text,blocked_id text,PRIMARY KEY(blocker_id,blocked_id));ALTER TABLE app.player_blocks ENABLE ROW LEVEL SECURITY');
-    for(const file of stage==='dev'?['017_dev_dreams.sql','018_dev_dream_media.sql','019_dev_dream_media_budget.sql','020_dev_dream_votes.sql','021_dev_dream_feed.sql','022_dev_dream_avatar.sql']:['009_dreams.sql','010_dream_media.sql','011_dream_media_budget.sql','012_dream_votes.sql','013_dream_feed.sql','014_dream_avatar.sql'])
+    for(const file of stage==='dev'?['017_dev_dreams.sql','018_dev_dream_media.sql','019_dev_dream_media_budget.sql','020_dev_dream_votes.sql','021_dev_dream_feed.sql','022_dev_dream_avatar.sql','023_dev_dream_comments.sql']:['009_dreams.sql','010_dream_media.sql','011_dream_media_budget.sql','012_dream_votes.sql','013_dream_feed.sql','014_dream_avatar.sql','015_dream_comments.sql'])
       await db.query(readFileSync(new URL(`${stage==='dev'?'../migrations/':'../production/'}${file}`,import.meta.url),'utf8'));
     reader=new pg.Pool({...connection,user:login,database,max:6});
     const queries=[];

@@ -17,6 +17,7 @@ import { processor,noteObject } from '../../dream-media/processor.mjs';
 import { sweepCleanup } from '../../dream-media/cleanup.mjs';
 import { mediaServer } from '../../dream-media/gateway.mjs';
 import { startWorker,settleWorker,splitRuntime,monthOf } from '../../dream-media/budget.mjs';
+import { verifyComments } from './dream-comments-fixtures.mjs';
 const require = createRequire(import.meta.url), port = process.env.PGTEST_PORT;
 const sourceRoot = fileURLToPath(new URL('../../src/lib/', import.meta.url));
 function loadService(withDreamDb) {
@@ -30,9 +31,9 @@ function loadService(withDreamDb) {
     vm.runInNewContext(`(function(require,module,exports){${code}\n})`, { Buffer, Date, Map, Set, Error,URL,process:{env:{AMBATUPOST_MEDIA_BASE_URL:'https://fixture.invalid'}} })(dependency,module,module.exports);
     return module.exports;
   };
-  return {...load('dreams.ts'),...load('dream-uploads.ts'),...load('dream-votes.ts')};
+  return {...load('dreams.ts'),...load('dream-uploads.ts'),...load('dream-votes.ts'),...load('dream-comments.ts')};
 }
-for (const stage of ['dev','prod']) test(`${stage} Dream migration: private roles, audience checks, idempotency, edits, cursors and deletion races`, { skip: !port }, async () => {
+for (const stage of ['dev','prod']) test(`${stage} Dream migration: private roles, posts/comments, votes, privacy, cursors and deletion races`, { skip: !port }, async () => {
   const connection = { host:'127.0.0.1', port:Number(port), user:'postgres', database:'postgres' };
   const admin = new pg.Pool(connection), database=`dreams_${stage}_${Date.now()}`;
   await admin.query(`CREATE DATABASE ${database}`);
@@ -51,6 +52,7 @@ for (const stage of ['dev','prod']) test(`${stage} Dream migration: private role
     await db.query(readFileSync(new URL(stage==='dev'?'../migrations/020_dev_dream_votes.sql':'../production/012_dream_votes.sql',import.meta.url),'utf8'));
     await db.query(readFileSync(new URL(stage==='dev'?'../migrations/021_dev_dream_feed.sql':'../production/013_dream_feed.sql',import.meta.url),'utf8'));
     await db.query(readFileSync(new URL(stage==='dev'?'../migrations/022_dev_dream_avatar.sql':'../production/014_dream_avatar.sql',import.meta.url),'utf8'));
+    await db.query(readFileSync(new URL(stage==='dev'?'../migrations/023_dev_dream_comments.sql':'../production/015_dream_comments.sql',import.meta.url),'utf8'));
     reader = new pg.Pool({ ...connection,user:login,database,max:6 });
     const withDreamDb = async callback => {
       const client=await reader.connect();
@@ -61,6 +63,7 @@ for (const stage of ['dev','prod']) test(`${stage} Dream migration: private role
     await db.query("INSERT INTO app.player_profiles(id,username,birth_date) VALUES ('author','Author','2000-01-01')");
     await db.query("INSERT INTO app.friendships(player_id,other_player_id,state) VALUES ('author','friend','accepted'),('friend','author','accepted'),('author','pending','outgoing'),('pending','author','incoming')");
     await db.query("INSERT INTO app.player_blocks VALUES ('author','blocked')");
+    await verifyComments(service,db);
     for (const audience of ['public','friends','only_me']) {
       const dream=await service.createDream(author,{text:`A ${audience} Dream`,audience},`audience-${audience}`);
       for(const viewer of [null,author,friend,pending,blocked,stranger]) {

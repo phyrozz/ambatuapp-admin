@@ -1,0 +1,96 @@
+// Runs only inside the existing disposable loopback Dream database fixtures.
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+
+export async function verifyComments(api, db) {
+  for(const body of [{text:''},{text:' '},{text:'x'.repeat(2001)},{text:'\u0000'},{text:'\ud800'},{text:'Hello',authorId:'forged'},{text:'Hello',parentId:'invalid'},{text:7},null])assert.throws(()=>api.commentBody(body),error=>error.code==='INVALID_COMMENT');
+  assert.equal(Array.from(api.commentBody({text:'😀'.repeat(2000)}).text).length,2000);
+  const dream = await api.createDream('author',{text:'Comment fixture'},'comments-fixture');
+  const root = await api.createDreamComment(dream.id,'commenter',{text:'Hello <script>fixture</script>'},'comment-create-1');
+  assert.equal((await api.listDreamComments(dream.id,null,null,null)).comments[0].text,root.text);
+  assert.equal((await api.createDreamComment(dream.id,'commenter',{text:root.text},'comment-create-1')).id,root.id);
+  await assert.rejects(api.createDreamComment(dream.id,'commenter',{text:'Other intent'},'comment-create-1'),e=>e.status===409);
+  const duplicates = await Promise.all(Array.from({length:4},()=>api.createDreamComment(dream.id,'commenter',{text:'One request'},'parallel-create')));
+  assert.equal(new Set(duplicates.map(row=>row.id)).size,1);
+  const reply = await api.createDreamComment(dream.id,'replier',{text:'Reply',parentId:root.id},'reply-create-1');
+  const nested = await api.createDreamComment(dream.id,'reply-other',{text:'Reply to reply',parentId:reply.id},'nested-create-1');
+  assert.equal(nested.parentId,root.id,'replies stay within one root thread');
+  assert.equal((await api.listDreamComments(dream.id,null,null,root.id)).comments.length,2);
+  await assert.rejects(api.listDreamComments(dream.id,null,null,reply.id),e=>e.status===404);
+  const other = await api.createDream('author',{text:'Other Dream'},'comments-other-dream');
+  await assert.rejects(api.createDreamComment(other.id,'commenter',{text:'Forged parent',parentId:root.id},'cross-post-reply'),e=>e.status===404);
+  await assert.rejects(api.editDreamComment(dream.id,root.id,'replier',{text:'Stolen',revision:1}),e=>e.status===404);
+  await assert.rejects(api.deleteDreamComment(dream.id,root.id,'author'),e=>e.status===404,'Dream authors cannot delete another author comment');
+  const edits=await Promise.allSettled([api.editDreamComment(dream.id,root.id,'commenter',{text:'Edit one',revision:1}),api.editDreamComment(dream.id,root.id,'commenter',{text:'Edit two',revision:1})]);
+  assert.equal(edits.filter(row=>row.status==='fulfilled').length,1);
+  assert.equal(edits.find(row=>row.status==='rejected').reason.code,'COMMENT_REVISION_CONFLICT');
+  await Promise.all(Array.from({length:12},(_,index)=>api.voteDreamComment(dream.id,root.id,`comment-voter-${index}`,{value:index%2?1:-1},`comment-vote-${index}`)));
+  const initial = await api.voteDreamComment(dream.id,root.id,'commenter',{value:1},'comment-self-vote');
+  assert.equal(initial.up,7);assert.equal(initial.down,6);
+  await Promise.all(Array.from({length:4},()=>api.voteDreamComment(dream.id,root.id,'commenter',{value:-1},'comment-switch-vote')));
+  assert.equal((await api.voteDreamComment(dream.id,root.id,'commenter',{value:1},'comment-self-vote')).viewerVote,-1,'delayed receipts do not undo newer votes');
+  await assert.rejects(api.voteDreamComment(dream.id,root.id,'commenter',{value:0},'comment-self-vote'),e=>e.status===409);
+  await api.voteDreamComment(dream.id,root.id,'commenter',{value:0},'comment-clear-vote');
+  await db.query("INSERT INTO app.player_blocks VALUES('commenter','reader')");
+  assert(!(await api.listDreamComments(dream.id,'reader',null,null)).comments.some(row=>row.id===root.id));
+  await assert.rejects(api.listDreamComments(dream.id,'reader',null,root.id),e=>e.status===404);
+  await assert.rejects(api.voteDreamComment(dream.id,reply.id,'reader',{value:1},'blocked-thread-vote'),e=>e.status===404);
+  await assert.rejects(api.createDreamComment(dream.id,'reader',{text:'Hidden parent',parentId:root.id},'blocked-thread-reply'),e=>e.status===404);
+  assert((await api.listDreamComments(dream.id,null,null,null)).comments.some(row=>row.id===root.id),'guests are not identifiable as a blocked account');
+  await db.query("DELETE FROM app.player_blocks WHERE blocker_id='commenter'");
+  await db.query("INSERT INTO app.player_blocks VALUES('reader','replier')");
+  assert(!(await api.listDreamComments(dream.id,'reader',null,root.id)).comments.some(row=>row.id===reply.id));
+  await db.query("DELETE FROM app.player_blocks WHERE blocker_id='reader'");
+  await api.editDream(dream.id,'author',{revision:1,audience:'friends'});
+  await assert.rejects(api.listDreamComments(dream.id,null,null,null),e=>e.status===404);
+  await assert.rejects(api.voteDreamComment(dream.id,root.id,'commenter',{value:1},'comment-self-vote'),e=>e.status===404,'retries reauthorize current audience');
+  assert((await api.listDreamComments(dream.id,'friend',null,null)).comments.length);
+  await api.editDream(dream.id,'author',{revision:2,audience:'public'});
+  const cursored = await api.createDream('author',{text:'Pagination'},'comments-pages');
+  for(let index=0;index<27;index++) await db.query("INSERT INTO app.dream_comments(id,dream_id,author_id,body,created_at) VALUES($1,$2,'page-author',$3,timestamptz '2026-01-01 00:00:00.999999+00'-$4*interval '1 microsecond')",[randomUUID(),cursored.id,`Comment ${index}`,index]);
+  const seen=new Set();let cursor=null;let firstCursor;
+  do {
+    const page=await api.listDreamComments(cursored.id,'reader',cursor,null);
+    if(!firstCursor)firstCursor=page.nextCursor;
+    for(const item of page.comments){assert(!seen.has(item.id));seen.add(item.id);}
+    cursor=page.nextCursor;
+  } while(cursor);
+  assert.equal(seen.size,27,'microsecond cursor pagination has no omissions or duplicates');
+  await assert.rejects(api.listDreamComments(cursored.id,'other-reader',firstCursor,null),e=>e.status===400);
+  await assert.rejects(api.listDreamComments(dream.id,'reader',firstCursor,null),e=>e.status===400);
+  await db.query("INSERT INTO app.player_blocks VALUES('page-author','reader')");
+  const hidden=await api.listDreamComments(cursored.id,'reader',null,null);
+  assert.equal(hidden.comments.length,0);assert(hidden.nextCursor,'hidden candidate batches preserve continuation');
+  await db.query("DELETE FROM app.player_blocks WHERE blocker_id='page-author'");
+  await db.query("INSERT INTO app.dream_comment_budgets(actor_id,kind,minute_requests) VALUES('limited-commenter','write',20),('limited-comment-voter','vote',60)");
+  await assert.rejects(api.createDreamComment(dream.id,'limited-commenter',{text:'Limit'},'limited-comment'),e=>e.status===429);
+  await assert.rejects(api.voteDreamComment(dream.id,root.id,'limited-comment-voter',{value:1},'limited-vote'),e=>e.status===429);
+  await api.voteDreamComment(dream.id,reply.id,'leaving-commenter',{value:1},'leaving-comment-vote');
+  await api.createDreamComment(dream.id,'leaving-commenter',{text:'Account content',parentId:root.id},'leaving-comment-text');
+  await Promise.allSettled([api.createDreamComment(dream.id,'leaving-commenter',{text:'Racing content'},'leaving-comment-race'),api.beginPlayerDreamDeletion('leaving-commenter')]);
+  assert.equal((await db.query("SELECT 1 FROM app.dream_comments WHERE author_id='leaving-commenter' OR body IN ('Account content','Racing content')")).rowCount,0);
+  assert.equal((await db.query("SELECT 1 FROM app.dream_comment_votes WHERE voter_id='leaving-commenter'")).rowCount,0);
+  assert.equal((await db.query('SELECT buss_up_count FROM app.dream_comments WHERE id=$1',[reply.id])).rows[0].buss_up_count,0);
+  await assert.rejects(api.createDreamComment(dream.id,'leaving-commenter',{text:'Resurrect'},'after-account-delete'),e=>e.status===404);
+  await api.deleteDreamComment(dream.id,root.id,'commenter');
+  const marker=(await api.listDreamComments(dream.id,null,null,null)).comments.find(row=>row.id===root.id);
+  assert.equal(marker.text,null);assert.equal(marker.authorId,null);assert.equal(marker.authorName,null);assert.equal(marker.votes.up,0);
+  assert((await api.listDreamComments(dream.id,null,null,root.id)).comments.some(row=>row.id===reply.id),'other authors replies survive root deletion');
+  await assert.rejects(api.createDreamComment(dream.id,'commenter',{text:root.text},'comment-create-1'),e=>e.status===410);
+  await assert.rejects(api.voteDreamComment(dream.id,root.id,'reader',{value:1},'deleted-comment-vote'),e=>e.status===404);
+  await api.deleteDreamComment(dream.id,reply.id,'replier');
+  assert(!(await api.listDreamComments(dream.id,null,null,root.id)).comments.some(row=>row.id===reply.id));
+  const lone=await api.createDreamComment(dream.id,'lone-commenter',{text:'No replies'},'lone-comment-intent');
+  assert.equal((await api.deleteDreamComment(dream.id,lone.id,'lone-commenter')).retained,false);
+  assert.equal((await db.query('SELECT 1 FROM app.dream_comments WHERE id=$1',[lone.id])).rowCount,0);
+  await assert.rejects(api.createDreamComment(dream.id,'lone-commenter',{text:'No replies'},'lone-comment-intent'),e=>e.status===410);
+  for(const table of ['dream_comments','dream_comment_requests','dream_comment_votes','dream_comment_vote_requests','dream_comment_budgets']){
+    assert.equal((await db.query("SELECT relrowsecurity AS enabled FROM pg_class WHERE oid=$1::regclass",[`app.${table}`])).rows[0].enabled,true);
+    for(const browser of ['anon','authenticated','service_role'])assert.equal((await db.query('SELECT has_table_privilege($1,$2,\'SELECT\') OR has_table_privilege($1,$2,\'INSERT\') AS exposed',[browser,`app.${table}`])).rows[0].exposed,false);
+  }
+  await api.deleteDream(dream.id,'author');
+  assert.equal((await db.query('SELECT 1 FROM app.dream_comments WHERE dream_id=$1',[dream.id])).rowCount,0);
+  assert.equal((await db.query('SELECT 1 FROM app.dream_comment_requests WHERE dream_id=$1',[dream.id])).rowCount,0);
+  await api.deleteDream(cursored.id,'author');
+  await api.deleteDream(other.id,'author');
+}
