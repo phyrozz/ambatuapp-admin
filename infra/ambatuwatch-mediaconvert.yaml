@@ -90,6 +90,7 @@ Resources:
               - !Sub 'arn:${AWS::Partition}:s3:::${VideoBucketName}/video-upload-staging/*'
               - !Sub 'arn:${AWS::Partition}:s3:::${VideoBucketName}/video-processing/*'
               - !Sub 'arn:${AWS::Partition}:s3:::${VideoBucketName}/video-thumbnails/*'
+              - !Sub 'arn:${AWS::Partition}:s3:::${VideoBucketName}/scroll-ads/*'
 
 Outputs:
   MediaConvertRoleArn:

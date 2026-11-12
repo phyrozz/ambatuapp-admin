@@ -1,9 +1,10 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ROLE_TYPES, STUDIO_MODULES, canAccess, normalizePermissions, permissionForRequest, rootPermissions, validateCredentials, validateProfile } from './studio-policy.mjs';
 test('Root covers every module and all six actions, and denies unknown permissions', () => {
   const permissions = rootPermissions();
-  assert.equal(STUDIO_MODULES.length, 10);
+  assert.equal(STUDIO_MODULES.length, 11);
+  assert.equal(canAccess(permissions, 'scroll-ads', 'view'), true);
   assert.deepEqual(ROLE_TYPES, ['view', 'add', 'edit', 'delete', 'upload', 'download']);
   for (const studioModule of STUDIO_MODULES) for (const action of ROLE_TYPES) assert.equal(canAccess(permissions, studioModule.id, action), true);
   assert.equal(canAccess(permissions, 'future-unknown', 'view'), false);
@@ -50,3 +51,4 @@ test('Manual creation rejects invalid email and mismatched or short passwords be
   assert.throws(() => validateCredentials({ ...valid, password: 'short', confirmPassword: 'short' }));
   assert.throws(() => validateCredentials({ ...valid, email: 'bad-email' }));
 });
+

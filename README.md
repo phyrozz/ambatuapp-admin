@@ -32,6 +32,10 @@ The chat report queue is at `/chat-reports`. Set server-only `CHAT_TABLE` and `C
 
 The soundboard catalog is managed at `/sounds`. Audio is stored under `soundboard/` in `AWS_S3_CHARACTER_IMAGES_BUCKET`; grant the admin runtime S3 `PutObject` and `GetObject` permissions for that prefix, and allow `PUT` from the admin app origin in the bucket CORS policy. The public API exposes catalog metadata and redirects playback through short lived S3 URLs. Point the revamp app's `NEXT_PUBLIC_CHARACTER_API_URL` to the admin public API base ending in `/api/public` so the same catalog is available in AmbatuChat and Soundboard. To move the 26 bundled legacy clips into Firestore and S3 while keeping their current IDs for old chat messages, run `npm run seed:sounds` once from this directory after configuring `.env.local`. The script skips IDs already in `soundboardSounds`, so it can be safely rerun after a partial import.
 
+## AmbatuScroll banners
+
+The Scroll ads module uploads PNG, JPEG, and WebP images (up to 3 MB) to the private `scroll-ads/` prefix of `AWS_S3_CHARACTER_IMAGES_BUCKET`. The admin runtime needs `s3:PutObject`, `s3:GetObject`, and `s3:DeleteObject` for that prefix; update and attach the provided `infra/ambatuwatch-mediaconvert.yaml` app policy or grant equivalent permissions. Studio users need both Add or Edit and Upload permissions to upload an image. Existing URL-based banners remain supported. Apply `016_scroll_ads.sql` and `017_scroll_ads_studio_module.sql` in development, or `008_scroll_ads.sql` and `009_scroll_ads_studio_module.sql` in production, before deploying the feature.
+
 ## AmbatuWatch video compression
 
 AmbatuWatch's Relevance sort gives a video uploaded in the last seven days a freshness bonus of up to five points, fading to zero over the week. Each batch compares its newest eligible upload with the highest-engagement video, then fills remaining positions by engagement. Deploy its Firestore indexes from this directory with `firebase deploy --only firestore:indexes --project YOUR_FIREBASE_PROJECT_ID` before enabling the sort in production.

@@ -10,7 +10,7 @@ import { useStudioAccess } from './studio-access-provider';
 import { useI18n } from './studio-i18n';
 import { LoadingScreen } from './admin-ui';
 import { StudioBrand } from './studio-brand';
-const icons = [LayoutDashboard, UsersRound, BookOpen, Video, AudioLines, Image, Flag, Settings, UsersRound, ShieldCheck];
+const icons = [LayoutDashboard, UsersRound, BookOpen, Video, Image, AudioLines, Image, Flag, Settings, UsersRound, ShieldCheck];
 export function AdminShell({ children, onSignedOut }: { children: React.ReactNode; onSignedOut?: () => void }) {
   return <Shell onSignedOut={onSignedOut}>{children}</Shell>;
 }

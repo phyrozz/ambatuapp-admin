@@ -267,3 +267,48 @@ a.dashboard-content-row:hover{color:#b54b2b}
 .dashboard-chart-ongoing-label{display:inline-flex;align-items:center;border-radius:99px;background:#f0eef7;color:#62578e;padding:3px 7px;font-size:10px;font-weight:700;white-space:nowrap}
 .dashboard-chart button.dashboard-bar-column.dashboard-bar-column-ongoing{background:repeating-linear-gradient(135deg,#f5f3fa 0,#f5f3fa 4px,#fff 4px,#fff 8px);border-left:1px dashed #b8b0d0;border-right:1px dashed #b8b0d0}
 .dashboard-chart button.dashboard-bar-column.dashboard-bar-column-ongoing .dashboard-bar{background:#62578e}
+.scroll-ad-editor,.scroll-ads-library { margin-top:28px; border:1px solid #e9e2d9; border-radius:20px; background:#fff; box-shadow:0 10px 30px #3725110a; padding:28px; }
+.scroll-ad-editor-heading,.scroll-ads-library-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; }
+.scroll-ad-editor-heading h2,.scroll-ads-library-heading h2 { margin:3px 0 5px; font-size:22px; letter-spacing:-.03em; }
+.scroll-ad-editor-heading p:not(.scroll-ad-kicker),.scroll-ads-library-heading p:not(.scroll-ad-kicker) { margin:0; color:#7c756e; font-size:13px; }
+.scroll-ad-kicker { margin:0; color:#c7652b; font-size:10px; letter-spacing:.13em; font-weight:800; }
+.scroll-ad-editor-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:32px; margin-top:28px; }
+.scroll-ad-fields { display:grid; gap:19px; align-content:start; }
+.scroll-ad-fields > label:not(.scroll-ad-status) { display:grid; gap:8px; font-size:13px; font-weight:700; color:#2a2724; }
+.scroll-ad-fields input:not([type=checkbox]) { width:100%; height:46px; border:1px solid #ddd9d3; border-radius:9px; padding:0 13px; background:#fff; color:#24211e; font:inherit; font-weight:400; }
+.scroll-ad-fields input:focus-visible,.scroll-ad-upload:focus-within { outline:3px solid #f5a66d; outline-offset:2px; }
+.scroll-ad-fields small,.scroll-ad-filename { color:#8b837a; font-size:12px; font-weight:400; }
+.scroll-ad-status { display:flex; align-items:center; justify-content:space-between; gap:14px; border:1px solid #eee8e1; border-radius:11px; padding:15px; background:#faf8f5; cursor:pointer; }
+.scroll-ad-status span { display:grid; gap:4px; font-size:13px; }
+.scroll-ad-status input { appearance:none; flex:none; width:42px; height:24px; border-radius:99px; background:#b6b0aa; position:relative; cursor:pointer; transition:background .18s; }
+.scroll-ad-status input::after { content:''; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:white; transition:transform .18s; }
+.scroll-ad-status input:checked { background:#e77832; }
+.scroll-ad-status input:checked::after { transform:translateX(18px); }
+.scroll-ad-creative-title { display:flex; justify-content:space-between; gap:10px; align-items:baseline; margin-bottom:9px; font-size:13px; }
+.scroll-ad-creative-title span { color:#8b837a; font-size:11px; }
+.scroll-ad-preview { display:grid; place-items:center; aspect-ratio:16/9; overflow:hidden; border:1px dashed #d8c9ba; border-radius:12px; background:#faf7f2; }
+.scroll-ad-preview.has-image { border-style:solid; background:#25211e; }
+.scroll-ad-preview img { width:100%; height:100%; object-fit:contain; }
+.scroll-ad-preview > div { display:grid; justify-items:center; gap:8px; padding:20px; color:#b08466; text-align:center; font-size:12px; }
+.scroll-ad-preview > div strong { color:#64564b; font-size:13px; }
+.scroll-ad-upload { position:relative; display:inline-flex; gap:8px; align-items:center; justify-content:center; margin-top:12px; cursor:pointer; }
+.scroll-ad-upload input { position:absolute; width:1px; height:1px; opacity:0; overflow:hidden; }
+.scroll-ad-filename { display:block; margin-top:8px; overflow-wrap:anywhere; }
+.scroll-ad-editor-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:26px; padding-top:20px; border-top:1px solid #f0ebe5; }
+.scroll-ads-error { padding:13px 16px; border:1px solid #efb6a5; border-radius:10px; background:#fff3ee; color:#9c3324; }
+.scroll-ads-library-heading > span { padding:6px 10px; border-radius:20px; background:#f5f1eb; color:#766b60; font-size:11px; font-weight:700; white-space:nowrap; }
+.scroll-ads-admin-list { display:grid; gap:12px; margin-top:22px; }
+.scroll-ads-admin-card { display:flex; gap:18px; align-items:center; padding:14px; border:1px solid #eee9e2; border-radius:14px; background:#fff; overflow-wrap:anywhere; }
+.scroll-ads-admin-card > img { flex:none; width:170px; height:96px; object-fit:cover; border-radius:9px; background:#f3eee7; }
+.scroll-ads-card-content { min-width:0; flex:1; }
+.scroll-ads-card-content h3 { margin:7px 0; font-size:16px; }
+.scroll-ads-card-content a { display:flex; align-items:center; gap:5px; color:#88796b; font-size:12px; overflow-wrap:anywhere; }
+.scroll-ad-badge { display:inline-block; padding:4px 8px; border-radius:20px; background:#f1eee9; color:#7c7167; font-size:10px; font-weight:800; }
+.scroll-ad-badge.is-active { background:#e7f5eb; color:#34764b; }
+.scroll-ads-card-actions { display:flex; align-items:center; gap:6px; }
+.scroll-ads-empty { display:grid; justify-items:center; gap:8px; padding:48px 20px; border:1px dashed #e5d9cd; border-radius:14px; background:#fcfaf7; color:#b79275; text-align:center; font-size:13px; }
+.scroll-ads-empty strong { color:#443a32; font-size:15px; }
+.scroll-ads-empty span { color:#8b8178; }
+@media(max-width:760px) { .scroll-ad-editor,.scroll-ads-library { padding:20px; border-radius:16px; } .scroll-ad-editor-grid { grid-template-columns:1fr; gap:24px; } .scroll-ads-admin-card { align-items:flex-start; flex-wrap:wrap; } .scroll-ads-admin-card > img { width:120px; height:76px; } .scroll-ads-card-actions { margin-left:auto; } }
+@media(max-width:440px) { .scroll-ads-admin-card > img { width:100%; height:auto; aspect-ratio:16/9; } .scroll-ads-card-content { flex-basis:100%; } .scroll-ads-card-actions { margin-left:0; } .scroll-ad-creative-title { flex-direction:column; gap:4px; } }
+@media(prefers-reduced-motion:reduce) { .scroll-ad-status input,.scroll-ad-status input::after { transition:none; } }

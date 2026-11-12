@@ -4,6 +4,7 @@ export const STUDIO_MODULES = [
   { id: 'characters', href: '/characters', key: 'studio.modules.characters' },
   { id: 'lores', href: '/lores', key: 'studio.modules.lores' },
   { id: 'videos', href: '/videos', key: 'studio.modules.videos' },
+  { id: 'scroll-ads', href: '/scroll-ads', key: 'studio.modules.scrollAds' },
   { id: 'sounds', href: '/sounds', key: 'studio.modules.sounds' },
   { id: 'profile-avatars', href: '/profile-avatars', key: 'studio.modules.profileAvatars' },
   { id: 'chat-reports', href: '/chat-reports', key: 'studio.modules.chatReports' },
